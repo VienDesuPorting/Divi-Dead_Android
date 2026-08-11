@@ -71,4 +71,23 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
+
+    // Force consistent Kotlin stdlib version to avoid duplicate class errors
+    // (kotlin-stdlib 1.8+ merged jdk7/jdk8 modules, but old deps still pull them)
+    constraints {
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}
+
+// Exclude old kotlin-stdlib-jdk7/jdk8 since they're merged into kotlin-stdlib 1.8+
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
 }
