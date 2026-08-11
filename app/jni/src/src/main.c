@@ -210,7 +210,7 @@ void PROGRAM_EXIT_ERROR(char *format, ...) {
 	PROGRAM_EXIT(-1);
 }
 
-int process_exit(void *userdata, const SDL_Event *event) {
+int process_exit(void *userdata, SDL_Event *event) {
 	if (event->type == SDL_QUIT) PROGRAM_EXIT(0);
 	return 1;
 }
