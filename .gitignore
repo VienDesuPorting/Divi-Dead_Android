@@ -5,9 +5,6 @@ local.properties
 *.iml
 .cxx/
 
-# SDL2 C/C++ submodules (cloned separately by user)
-app/jni/SDL/
-
 # IDE files
 .idea/
 *.swp

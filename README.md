@@ -1,27 +1,20 @@
 # Divi-Dead Android Port
 
 Native Android port of the Divi-Dead visual novel engine, built with SDL2.
-
-## Features
-
-- **Full game engine** with UTF-8 rendering (Cyrillic support)
-- **Touch gesture controls** (tap, swipe, long press)
-- **640×480 fixed resolution** (gothic frame renders correctly)
-- **OGG music + ROQ video** support
-- **Adaptive launcher icons** (all densities, Android 8+)
-- **Java Activity** (DiviDeadActivity) + SDL2 Java backend
+SDL2 is included as git submodules — clone with `--recursive`.
 
 ## Quick start
 
-### 1. Clone SDL2 C libraries
+### 1. Clone this repo (with submodules)
 
 ```bash
-cd app/jni
-mkdir -p SDL && cd SDL
-git clone --depth 1 --branch SDL2 https://github.com/libsdl-org/SDL.git
-git clone --depth 1 --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
-git clone --depth 1 --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
-git clone --depth 1 --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
+git clone --recursive https://github.com/christopher-vn/Divi-dead_android.git
+cd Divi-dead_android
+```
+
+If you already cloned without `--recursive`:
+```bash
+git submodule update --init --recursive
 ```
 
 ### 2. Add game assets
@@ -30,26 +23,45 @@ git clone --depth 1 --branch release-2.24.x https://github.com/libsdl-org/SDL_tt
 ./populate_assets.sh /path/to/your/dividead-folder
 ```
 
-This copies `SG.DL1`, `WV.DL1`, `LANG/ENGLISH.TXT`, `OGG/`, `CS_ROGO.MPG`
+Copies `SG.DL1`, `WV.DL1`, `LANG/ENGLISH.TXT`, `OGG/`, `CS_ROGO.MPG`
 into `app/src/main/assets/`.
 
 ### 3. Build
 
-Open in Android Studio → Run, or from command line:
+Open in Android Studio → Run, or:
 ```bash
 ./gradlew assembleDebug
 ```
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+## Features
+
+- **Full game engine** with UTF-8 rendering (Cyrillic support)
+- **Touch gesture controls**:
+  - Tap → Select/Confirm
+  - Swipe up → Open menu
+  - Swipe down → Gallery
+  - Swipe left/right → Navigate
+  - Long press → Cancel
+- **640×480 fixed resolution** (gothic frame renders correctly)
+- **OGG music + ROQ video** support
+- **Adaptive launcher icons** (all densities, Android 8+)
+- **Java Activity** (DiviDeadActivity) + SDL2 Java backend
 
 ## Project structure
 
 ```
 ├── app/
-│   ├── build.gradle                    # AGP 8.x config
+│   ├── build.gradle                    # AGP 8.7 config
 │   ├── proguard-rules.pro
 │   ├── jni/
 │   │   ├── CMakeLists.txt              # NDK CMake build
+│   │   ├── SDL/                        # SDL2 submodules (auto-cloned)
+│   │   │   ├── SDL/                    # SDL2 core
+│   │   │   ├── SDL_image/              # Image loading
+│   │   │   ├── SDL_mixer/              # Audio mixing
+│   │   │   └── SDL_ttf/                # TrueType font rendering
 │   │   └── src/
 │   │       ├── src/                    # Engine source (patched)
 │   │       │   ├── main.c              # + SDL_main.h for Android
@@ -58,62 +70,43 @@ APK output: `app/build/outputs/apk/debug/app-debug.apk`
 │   │       │   └── ...
 │   │       └── RES/                    # Compiled resources
 │   └── src/main/
-│       ├── AndroidManifest.xml         # DiviDeadActivity entry
+│       ├── AndroidManifest.xml
 │       ├── java/
-│       │   ├── org/libsdl/app/         # SDL2 Java backend (5 files)
-│       │   │   ├── SDLActivity.java
-│       │   │   ├── SDLAudioManager.java
-│       │   │   ├── SDLControllerManager.java
-│       │   │   ├── HIDDeviceManager.java
-│       │   │   └── HIDDeviceBLESteamController.java
+│       │   ├── org/libsdl/app/         # SDL2 Java backend
 │       │   └── com/dividead/android/
-│       │       └── DiviDeadActivity.java  # Main entry point
-│       ├── res/                        # Launcher icons (all densities)
-│       └── assets/                     # Game data (populated by script)
+│       │       └── DiviDeadActivity.java
+│       ├── res/                        # Launcher icons
+│       └── assets/                     # Game data
 ├── fonts/                              # Cyrillic-capable fonts
 ├── tools/                              # Translation tools
-├── gradle/wrapper/                     # Gradle 8.2 wrapper
-├── build.gradle                        # AGP 8.1.2
+├── gradle/wrapper/                     # Gradle 8.11 wrapper
+├── build.gradle
 ├── settings.gradle
-├── gradle.properties
-├── gradlew                             # Gradle wrapper script
-└── populate_assets.sh
+└── gradlew
 ```
 
-## Java side
+## SDL2 submodules
 
-### DiviDeadActivity.java
+SDL2 is included as 4 git submodules in `app/jni/SDL/`:
 
-The main entry point. Extends `SDLActivity` (from SDL2) which handles:
-- Loading `libdividead.so` (the native engine)
-- Setting up SDL2 video/audio/input
-- Calling the native `SDL_main()` function
-- Android lifecycle (pause/resume/destroy)
+| Submodule | Branch | Purpose |
+|-----------|--------|---------|
+| `SDL` | `SDL2` | SDL2 core library |
+| `SDL_image` | `release-2.8.x` | Image loading (BMP, PNG, JPG) |
+| `SDL_mixer` | `release-2.8.x` | Audio mixing (OGG, MIDI, WAV) |
+| `SDL_ttf` | `release-2.24.x` | TrueType font rendering |
 
-DiviDeadActivity overrides:
-- `getArguments()` → passes `["SG.DL1"]` as argv to native main()
-- `getMainLibraryName()` → returns `"dividead"` (loads `libdividead.so`)
+These are built from source alongside the engine via CMake.
 
-### SDL2 Java backend
+## Build requirements
 
-The 5 files in `org/libsdl/app/` are from the SDL2 repository and provide
-the Android platform glue. They're included directly (not as a dependency)
-because SDL2 is built from source alongside the engine.
+- Android Studio Narwhal (2025.1.1)+ or JDK 17 + SDK + NDK
+- Android Gradle Plugin 8.7.2 (in build.gradle)
+- Gradle 8.11.1 (wrapper included)
+- NDK r25+
+- CMake 3.22.1+ (bundled with Android SDK)
 
-## Native side
-
-### Touch gestures (`touch_input.c`)
-
-| Gesture | Key | Action |
-|---------|-----|--------|
-| Tap | K_A | Select / Confirm / Advance text |
-| Swipe up | K_L | Open main menu |
-| Swipe down | K_R | Open gallery / extra menu |
-| Swipe left | K_LEFT | Navigate left |
-| Swipe right | K_RIGHT | Navigate right |
-| Long press (500ms) | K_B | Cancel / Back |
-
-### Engine patches
+## Engine patches
 
 | File | Patch |
 |------|-------|
@@ -125,14 +118,6 @@ because SDL2 is built from source alongside the engine.
 | `sjis_table.c` | `#include <stdlib.h>` |
 | `touch_input.c` | **NEW** — touch gesture handling |
 
-## Build requirements
-
-- Android Studio Hedgehog (2023.1.1)+ or just JDK 17 + SDK + NDK
-- Android Gradle Plugin 8.1.2 (included in build.gradle)
-- Gradle 8.2 (wrapper included)
-- NDK r25+
-- CMake 3.22.1+ (bundled with Android SDK)
-
 ## Translation tools
 
 In `tools/`:
@@ -140,30 +125,21 @@ In `tools/`:
 - `repack_sg.py` — repack patched `.AB` back into `SG.DL1`
 
 ```bash
-# Extract strings:
 python tools/ab_translator.py extract AASTART.AB -o aastart.patch
-
 # Edit aastart.patch — fill in translations after >
-
-# Apply:
 python tools/ab_translator.py patch AASTART.AB aastart.patch -o AASTART.RU.AB
-
-# Repack:
 python tools/repack_sg.py SG.DL1 AASTART.AB AASTART.RU.AB -o SG.RU.DL1
 ```
 
 ## Troubleshooting
 
 ### "SDL2 not found!" CMake error
-You forgot to clone SDL2. See step 1 above.
+Run `git submodule update --init --recursive` to clone SDL2.
 
-### Gradle sync fails with AGP version error
-Make sure you're using Gradle 8.2 (the wrapper handles this automatically).
-If Android Studio prompts to upgrade AGP, decline — 8.1.2 is what we need.
-
-### Build fails with "cannot find SDL_main.h"
-The `SDL_main.h` include is wrapped in `#ifdef __ANDROID__`. Make sure
-`__ANDROID__` is defined in CMakeLists.txt (it is, by default).
+### Gradle sync fails
+Make sure you're using Gradle 8.11 (the wrapper handles this).
+If Android Studio prompts to upgrade AGP, you can accept — it should be
+backwards compatible.
 
 ### App crashes on launch
 Check logcat: `adb logcat -s SDL DiviDead`
