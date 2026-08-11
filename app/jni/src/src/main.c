@@ -77,6 +77,7 @@ TTF_Font *font  = NULL; int font_height  = 0;
 TTF_Font *font2 = NULL; int font2_height = 0;
 
 SDL_Surface *screen = NULL, *screen_video = NULL, *interface = NULL;
+SDL_Window *g_sdl_window = NULL;
 SDL_PixelFormat screen_format;
 
 int done = 0, game_end = 0, swap_buttons = 0;
@@ -699,7 +700,7 @@ void SDL_Audio_Init()
 	}
 	
 	if (audio_initialized) {
-		if (!(click = Mix_LoadWAV_RW(STREAM_UNCOMPRESS_MEM(click_wav, size_click_wav), 1))) {
+		if (!(click = Mix_LoadWAV_RW(STREAM_UNCOMPRESS_MEM((void*)click_wav, size_click_wav), 1))) {
 			PROGRAM_EXIT_ERROR("Can't locate 'CLICK_WAV'");
 		} else {
 			printf("Loaded 'CLICK_WAV'\n");
@@ -748,7 +749,7 @@ void sdl_init() {
 		SDL_Rect r;
 		SDL_Surface *s;
 		printf("Loading Splash...");
-		s = IMG_Load_RW(STREAM_UNCOMPRESS_MEM(splash_jpg, size_splash_jpg), 1);
+		s = IMG_Load_RW(STREAM_UNCOMPRESS_MEM((void*)splash_jpg, size_splash_jpg), 1);
 		if (s == NULL) {
 			printf("Error: '%s'\n", SDL_GetError());
 		} else {
@@ -773,13 +774,13 @@ void sdl_init() {
 	SDL_Audio_Init();
 #endif
 	
-	if (!(font = TTF_OpenFontRW(SDL_RWFromMem(font_ttf, size_font_ttf), 1, font_height = font_size_corrected))) {
+	if (!(font = TTF_OpenFontRW(SDL_RWFromMem((void*)font_ttf, size_font_ttf), 1, font_height = font_size_corrected))) {
 		PROGRAM_EXIT_ERROR("Invalid FONT_TTF (II)");
 	} else {
 		printf("Loaded FONT_TTF\n");
 	}
 	
-	if (!(font2 = TTF_OpenFontRW(SDL_RWFromMem(font2_ttf, size_font2_ttf), 1, font2_height = 13))) {
+	if (!(font2 = TTF_OpenFontRW(SDL_RWFromMem((void*)font2_ttf, size_font2_ttf), 1, font2_height = 13))) {
 		PROGRAM_EXIT_ERROR("Invalid FONT2_TTF (II)");
 	} else {
 		printf("Loaded FONT2_TTF\n");
@@ -929,7 +930,7 @@ void lang_postinit() {
 			if (font_data = malloc(size)) {
 				SDL_RWread(f, font_data, 1, size);
 				if (font) TTF_CloseFont(font);
-				font = TTF_OpenFontRW(SDL_RWFromMem(font_data, size), 1, font_height = font_size_corrected + 3);
+				font = TTF_OpenFontRW(SDL_RWFromMem((void*)font_data, size), 1, font_height = font_size_corrected + 3);
 				SDL_RWclose(f);
 				is_shift_jis = 1;
 				if (IMAGE_CACHE_MAX > 7) IMAGE_CACHE_MAX = 7;
@@ -939,7 +940,7 @@ void lang_postinit() {
 		}
 	} else {
 		if (font) TTF_CloseFont(font);
-		font = TTF_OpenFontRW(SDL_RWFromMem(font_ttf, size_font_ttf), 1, font_height = font_size_corrected);
+		font = TTF_OpenFontRW(SDL_RWFromMem((void*)font_ttf, size_font_ttf), 1, font_height = font_size_corrected);
 		is_shift_jis = 0;
 	}
 	must_resume_music = 1;
@@ -1027,7 +1028,7 @@ int main(int argc, char* argv[])
 			if (font_data = malloc(size)) {
 				SDL_RWread(f, font_data, 1, size);
 				TTF_CloseFont(font);
-				font = TTF_OpenFontRW(SDL_RWFromMem(font_data, size), 1, font_height = font_size_corrected + 3);
+				font = TTF_OpenFontRW(SDL_RWFromMem((void*)font_data, size), 1, font_height = font_size_corrected + 3);
 				SDL_RWclose(f);
 				is_shift_jis = 1;
 				if (IMAGE_CACHE_MAX > 7) IMAGE_CACHE_MAX = 7;

@@ -60,7 +60,7 @@ void ICHAR_process(int dummy_size) {
 	for (n = 0; n < count; n++) {
 		int *off = (int*)(ichars_data + 4 + 8 * n);
 		if (off[0] && off[1]) {
-			ichars[n] = SDL_RWFromMem(ichars_data + off[0], off[1]);
+			ichars[n] = SDL_RWFromMem((void*)ichars_data + off[0], off[1]);
 			/*
 			printf("%d: %08X,%08X", n, off[0], off[1]);
 			printf("(%08X,%08X,%d)", ichars_data, ichars_data + off[0], off[0]);

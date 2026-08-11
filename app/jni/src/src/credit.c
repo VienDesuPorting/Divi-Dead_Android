@@ -67,8 +67,8 @@ void CREDIT_SHOW(int can_exit) {
 	extra[0] = CREDIT_SF_RESIZE(IMG_Load_RW(SDL_RWFromConstMem(end0_png, size_end0_png), 1));
 	extra[1] = CREDIT_SF_RESIZE(IMG_Load_RW(SDL_RWFromConstMem(end1_png, size_end1_png), 1));
 	
-	font_h = TTF_OpenFontRW(SDL_RWFromMem(font_ttf, size_font_ttf), 1, (int)(font_size_corrected * 1.4));
-	font_t = TTF_OpenFontRW(SDL_RWFromMem(font_ttf, size_font_ttf), 1, (int)(font_size_corrected * 1.1));
+	font_h = TTF_OpenFontRW(SDL_RWFromMem((void*)font_ttf, size_font_ttf), 1, (int)(font_size_corrected * 1.4));
+	font_t = TTF_OpenFontRW(SDL_RWFromMem((void*)font_ttf, size_font_ttf), 1, (int)(font_size_corrected * 1.1));
 	
 	for (rcredit = credit; (line = strtok(rcredit, "\n")) != NULL; rcredit = NULL) {
 		printf("%d:%s\n", nlines, line);
