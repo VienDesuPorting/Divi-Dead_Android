@@ -184,7 +184,7 @@ RING *RING_create(SDL_RWops *rw, int length, int read_l) {
 	SDL_RWseek(rw, rw_start, SEEK_SET);
 	
 	ring->mutex = SDL_CreateMutex();
-	ring->thread = SDL_CreateThread(RING_fill_thread, ring);
+	ring->thread = SDL_CreateThread(RING_fill_thread, "RING_fill_thread", ring);
 	return ring;
 }
 
@@ -195,17 +195,17 @@ int RING_RW_close(SDL_RWops *rw) { PREPARE_RING();
 	return 0;
 }
 
-int RING_RW_read(SDL_RWops *rw, void *ptr, int size, int maxnum) { PREPARE_RING();
+size_t RING_RW_read(SDL_RWops *rw, void *ptr, size_t size, size_t maxnum) { PREPARE_RING();
 	RING_debug("RING_RW_read(%d)\n", size * maxnum);
 	return RING_read(ring, ptr, size * maxnum);
 }
 
-int RING_RW_write(SDL_RWops *rw, const void *ptr, int size, int maxnum) {// PREPARE_RING();
+size_t RING_RW_write(SDL_RWops *rw, const void *ptr, size_t size, size_t maxnum) {// PREPARE_RING();
 	//RING_debug("RING_RW_write()\n");
 	return 0;
 }
 
-int RING_RW_seek(SDL_RWops *rw, int offset, int whence) { PREPARE_RING();
+Sint64 RING_RW_seek(SDL_RWops *rw, Sint64 offset, int whence) { PREPARE_RING();
 	RING_debug("RING_RW_seek(%d, %s)\n", offset, STRING_SEEK(whence));
 	
 	switch (whence) {
@@ -241,18 +241,18 @@ int TEST_RING_RW_close(SDL_RWops *_rw) { TEST_RING_RW_PREPARE();
 	return 0;
 }
 
-int TEST_RING_RW_read(SDL_RWops *_rw, void *ptr, int size, int maxnum) { TEST_RING_RW_PREPARE();
+size_t TEST_RING_RW_read(SDL_RWops *_rw, void *ptr, size_t size, size_t maxnum) { TEST_RING_RW_PREPARE();
 	//RING_debug("RING_RW_read(0x%08X, 0x%08X, %d)\n", rw, ptr, size * maxnum);
 	RING_debug("RING_RW_read(%d)\n", size * maxnum);
 	return SDL_RWread(rw, ptr, size, maxnum);
 }
 
-int TEST_RING_RW_write(SDL_RWops *_rw, const void *ptr, int size, int maxnum) { TEST_RING_RW_PREPARE();
+size_t TEST_RING_RW_write(SDL_RWops *_rw, const void *ptr, size_t size, size_t maxnum) { TEST_RING_RW_PREPARE();
 	RING_debug("RING_RW_write(...)\n");
 	return SDL_RWwrite(rw, ptr, size, maxnum);
 }
 
-int TEST_RING_RW_seek(SDL_RWops *_rw, int offset, int whence) {TEST_RING_RW_PREPARE();
+Sint64 TEST_RING_RW_seek(SDL_RWops *_rw, Sint64 offset, int whence) {TEST_RING_RW_PREPARE();
 	RING_debug("RING_RW_seek(%d, %s)\n", offset, STRING_SEEK(whence));
 	return SDL_RWseek(rw, offset, whence);
 }

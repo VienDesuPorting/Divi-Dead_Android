@@ -3,14 +3,11 @@
 ////////////////////////////////////////////////////////////
 #include "audio.h"
 
-#ifndef Mix_LoadMUS_RW
-extern DECLSPEC Mix_Music * SDLCALL Mix_LoadMUS_RW(SDL_RWops *rw);
-#endif
 
 #ifdef RINGBUF_AUDIO
-#define LoadFromMusic(a)  (music = Mix_LoadMUS_RW(RING_RW_open(SDL_RWFromFile(a, "rb"), 0x60000, 0x6000)))
+#define LoadFromMusic(a)  (music = Mix_LoadMUS_RW(RING_RW_open(SDL_RWFromFile(a, "rb"), 0x60000, 0x6000), 1))
 #else
-#define LoadFromMusic(a)  (music = Mix_LoadMUS_RW(SDL_RWFromFile(temp, "rb")))
+#define LoadFromMusic(a)  (music = Mix_LoadMUS_RW(SDL_RWFromFile(temp, "rb"), 1))
 #endif
 
 void GAME_MUSIC_PLAY(char *name) {

@@ -17,12 +17,12 @@ SDL_Surface *SDL_CompositeImage(SDL_Surface *color, SDL_Surface *alpha) {
 		pf.Rmask = 0xFF000000; pf.Gmask = 0x00FF0000; pf.Bmask = 0x0000FF00; pf.Amask = 0x000000FF;
 		pf.Rshift = 24; pf.Gshift = 16; pf.Bshift = 8; pf.Ashift = 0;
 		pf.Rloss = pf.Gloss = pf.Bloss = pf.Aloss = 0;
-		pf.colorkey = 0; pf.alpha = 0xFF;
+		
 	}
 	
-	//SDL_Surface *r = SDL_ConvertSurface(color, &pf, SDL_SRCALPHA | SDL_SWSURFACE);
+	//SDL_Surface *r = SDL_ConvertSurface(color, &pf, 0 | SDL_SWSURFACE);
 	
-	SDL_Surface *r = SDL_CreateRGBSurface(SDL_SWSURFACE | SDL_SRCALPHA, alpha->w, alpha->h, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
+	SDL_Surface *r = SDL_CreateRGBSurface(SDL_SWSURFACE | 0, alpha->w, alpha->h, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
 	
 	if (!r) PROGRAM_EXIT_ERROR("Can't composite image\n");
 
@@ -367,13 +367,6 @@ void GAME_BUFFER_FADEOUT2() {
 	GAME_BUFFER_FADEOUT2_EX(7);
 }
 
-int SDL_RWsize(SDL_RWops *f) {
-	int len;
-	int bpos = SDL_RWtell(f);
-	len = SDL_RWseek(f, 0, SEEK_END);
-	SDL_RWseek(f, bpos, SEEK_SET);
-	return len;
-}
 
 void reduceMemory() {
 	PROGRAM_EXIT_ERROR("Can't load image (Out of memory?)");
@@ -484,9 +477,9 @@ SDL_Surface *GAME_IMAGE_GET_EX3(char *_name1, char *_name2, int usecache, int sc
 			
 			if (surface_o->format->BitsPerPixel != 8) {
 				if (toupper(name1[0]) == 'I' && name1[1] == '_' && name1[2] == '1' && name1[3] == '7') {
-					SDL_SetColorKey(surface_o, SDL_SRCCOLORKEY, SDL_MapRGB(surface_o->format, 0x53, 0xFF, 0x00));
+					SDL_SetColorKey(surface_o, 0, SDL_MapRGB(surface_o->format, 0x53, 0xFF, 0x00));
 				} else {
-					SDL_SetColorKey(surface_o, SDL_SRCCOLORKEY, SDL_MapRGB(surface_o->format, 0x00, 0xFF, 0x00));
+					SDL_SetColorKey(surface_o, 0, SDL_MapRGB(surface_o->format, 0x00, 0xFF, 0x00));
 				}
 			}
 			
@@ -596,7 +589,7 @@ SDL_Surface *GAME_IMAGE_GET(char *name) {
 void GAME_BACKGROUND(char *name, SDL_Rect clip, int colorKey) {
 	SDL_Surface *surface;
 	if ((surface = GAME_IMAGE_GET(name)) != NULL) {
-		if (colorKey) SDL_SetColorKey(surface, SDL_SRCCOLORKEY, SDL_MapRGB(surface->format, 0x00, 0xFF, 0x00));
+		if (colorKey) SDL_SetColorKey(surface, 0, SDL_MapRGB(surface->format, 0x00, 0xFF, 0x00));
 		SDL_BlitSurface(surface, NULL, screen, &clip);
 		//SDL_FreeSurface(surface);
 	}
@@ -659,7 +652,7 @@ void GAME_CHARA_EX(char *_name, SDL_Rect clip)
 #ifdef CONVERT_16BPP
 	SDL_Surface* real;
 	real = SDL_DisplayFormat(surface);
-	SDL_SetColorKey(real, (SDL_SRCCOLORKEY | SDL_RLEACCEL), SDL_MapRGB(real->format, 0, 0, 0));
+	SDL_SetColorKey(real, (0 | SDL_RLEACCEL), SDL_MapRGB(real->format, 0, 0, 0));
 	SDL_BlitSurface(real, NULL, screen, &clip);
 	SDL_FreeSurface(real);
 #else

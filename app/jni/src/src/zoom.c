@@ -109,7 +109,7 @@ SDL_Surface *SDL_ZoomSurface(SDL_Surface *src, double zoomx, double zoomy) {
 	SDL_LockSurface(rdst);
 	{
 		SDL_ZoomSurfaceRGBA(rsrc, rdst);
-		SDL_SetAlpha(rdst, SDL_SRCALPHA, 255);		
+		(void)0;		
 	}
 	SDL_UnlockSurface(rdst);
     SDL_UnlockSurface(rsrc);

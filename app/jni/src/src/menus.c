@@ -465,7 +465,7 @@ int OPTION_JUMP_ROOM(int g) {
 		if (update) {
 			text_at(white, 50, 50, "%03d: %s            ", idx, files[idx].name);
 			update = 0;
-			SDL_Flip(screen_video); GAME_UPDATE_DEBUG_INFO();
+			(void)0; GAME_UPDATE_DEBUG_INFO();
 		}
 	}
 	
@@ -510,8 +510,8 @@ int OPTION_DEBUG_EDIT_FLAGS(int g) {
 	#define OP_DB_PRINT_OP_KV(c, x, y, k, v) text_at(c, screen_video->w * (x) / OP_DB_COLUMNS, (y) * font2_height, "%03d: %4d ", k, v);
 	#define OP_DB_PRINT_OP(c, x, y, k) { OP_DB_PRINT_OP_KV(c, x, y, k, save.flags[k]); }
 	#define OP_DB_PRINT_N(c, n) if ((n) >= 0 && (n) < index_count) { OP_DB_PRINT_OP(c, ((n) % OP_DB_COLUMNS), ((n) / OP_DB_COLUMNS + 2), indexes[n]); }
-	#define OP_DB_PRINT_N_U(c, n) { OP_DB_PRINT_N(c, n); SDL_Flip(screen_video); }
-	#define OP_DB_PRINT_VARS { int n; for (n = 0; n < index_count; n++) OP_DB_PRINT_N(white, n); SDL_Flip(screen_video); GAME_UPDATE_DEBUG_INFO(); }
+	#define OP_DB_PRINT_N_U(c, n) { OP_DB_PRINT_N(c, n); (void)0; }
+	#define OP_DB_PRINT_VARS { int n; for (n = 0; n < index_count; n++) OP_DB_PRINT_N(white, n); (void)0; GAME_UPDATE_DEBUG_INFO(); }
 
 	#define OP_DB_ADD_FLAGS(start, count) { int e, p; for (e = index_count, p = start; index_count < e + (count); index_count++, p++) { indexes[index_count] = p; } }
 	#define OP_DB_VAR(n) save.flags[indexes[n]]

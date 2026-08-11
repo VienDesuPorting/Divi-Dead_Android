@@ -55,7 +55,6 @@ extern void GAME_BUFFER_FADEOUT() ;
 extern void GAME_BUFFER_FADEOUT2_EX(int step) ;
 
 extern void GAME_BUFFER_FADEOUT2();
-extern int SDL_RWsize(SDL_RWops *f);
 
 extern void reduceMemory() ;
 extern SDL_Surface *GAME_IMAGE_GET_EX3(char *_name1, char *_name2, int usecache, int scale) ;

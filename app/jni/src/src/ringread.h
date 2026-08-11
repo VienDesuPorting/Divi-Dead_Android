@@ -51,9 +51,9 @@ extern int RING_read(RING *ring, char *ptr, int left);
 extern void RING_delete(RING *r);
 extern RING *RING_create(SDL_RWops *rw, int length, int read_l);
 extern int RING_RW_close(SDL_RWops *rw);
-extern int RING_RW_read(SDL_RWops *rw, void *ptr, int size, int maxnum);
-extern int RING_RW_write(SDL_RWops *rw, const void *ptr, int size, int maxnum);
-extern int RING_RW_seek(SDL_RWops *rw, int offset, int whence);
+extern size_t RING_RW_read(SDL_RWops *rw, void *ptr, int size, int maxnum);
+extern size_t RING_RW_write(SDL_RWops *rw, const void *ptr, int size, int maxnum);
+extern Sint64 RING_RW_seek(SDL_RWops *rw, int offset, int whence);
 
 
 #endif

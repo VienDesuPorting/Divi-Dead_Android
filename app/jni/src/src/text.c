@@ -39,7 +39,7 @@ void GAME_TEXT_PRINT2_EX(unsigned char *text, SDL_Color color, SDL_Color bgcolor
 		incy = font_height - surface->h + 1;
 		clip.y += incy;
 		clip.h -= incy;
-		if (colorKey) SDL_SetColorKey(surface, SDL_SRCCOLORKEY, SDL_MapRGB(surface->format, bgcolor.r, bgcolor.g, bgcolor.b));
+		if (colorKey) SDL_SetColorKey(surface, 0, SDL_MapRGB(surface->format, bgcolor.r, bgcolor.g, bgcolor.b));
 		SDL_BlitSurface(surface, NULL, screen, &clip);
 		SDL_FreeSurface(surface);
 	} else {

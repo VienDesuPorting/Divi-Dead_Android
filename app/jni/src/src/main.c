@@ -684,7 +684,7 @@ void prepare_interface_image(SDL_Rect *rect, SDL_Surface **dest) {
 	SDL_PixelFormat *pf = interface->format;
 	SDL_Surface *temp = SDL_CreateRGBSurface(interface->flags, rect->w, rect->h, pf->BitsPerPixel, pf->Rmask, pf->Gmask, pf->Bmask, pf->Amask);
 	SDL_BlitSurface(interface, rect, temp, NULL);
-	SDL_SetColorKey(temp, SDL_SRCCOLORKEY, SDL_MapRGB(temp->format, 0x00, 0xFF, 0x00));
+	SDL_SetColorKey(temp, 0, SDL_MapRGB(temp->format, 0x00, 0xFF, 0x00));
 	*dest = SDL_ZoomSurface(temp, ASPECT_X, ASPECT_Y);
 	SDL_FreeSurface(temp);
 }
@@ -712,7 +712,7 @@ void sdl_init() {
 	mutex_reading = SDL_CreateMutex();
 	SDL_ShowCursor(0);
 
-	SDL_WM_SetCaption("Divi Dead SDL", NULL);
+	(void)0;
 	if (!(screen_video = SDL_SetVideoMode(
 #if defined(DYNAMIC_RESOLUTION)
 	0,	0,
@@ -787,7 +787,7 @@ void sdl_init() {
 
 	SDL_JoystickOpen(0);
 	SDL_SetEventFilter(process_exit);
-	SDL_EnableKeyRepeat(KEY_REPEAT_DELAY1, KEY_REPEAT_DELAY2);
+	(void)0;
 	prepare_rects();
 }
 

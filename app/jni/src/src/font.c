@@ -43,7 +43,7 @@ int font_string_decode(FONT *f, unsigned char *c, unsigned short *out) {
 }
 
 SDL_Surface *font_char_render_index(FONT *f, unsigned short idx) {
-	SDL_Surface *s = SDL_CreateRGBSurface(SDL_SRCALPHA | SDL_SWSURFACE, 20, 20, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
+	SDL_Surface *s = SDL_CreateRGBSurface(0 | SDL_SWSURFACE, 20, 20, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
 	int n, m;
 	unsigned int *out;
 	unsigned char *in = f->glyphs + idx * 100;
@@ -81,7 +81,7 @@ SDL_Surface *font_string_render(FONT *f, unsigned char *text, int height) {
 	w = font_string_width(f, buffer, buf_len);
 	h = 19;
 	
-	s = SDL_CreateRGBSurface(SDL_SRCALPHA | SDL_SWSURFACE, w, h, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
+	s = SDL_CreateRGBSurface(0 | SDL_SWSURFACE, w, h, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
 	
 	
 	return s;

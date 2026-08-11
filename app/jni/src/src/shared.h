@@ -13,6 +13,7 @@
 #include <SDL/SDL_thread.h>
 #include <SDL/SDL_mutex.h>
 #include <SDL/SDL_ttf.h>
+#include "sdl12_compat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
