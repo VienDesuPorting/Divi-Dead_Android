@@ -1,21 +1,18 @@
 # Divi-Dead Android Port
 
 Native Android port of the Divi-Dead visual novel engine, built with SDL2.
-SDL2 is included as git submodules — clone with `--recursive`.
+SDL2 is **automatically downloaded** during CMake configure via FetchContent.
 
 ## Quick start
 
-### 1. Clone this repo (with submodules)
+### 1. Clone this repo
 
 ```bash
-git clone --recursive https://github.com/christopher-vn/Divi-dead_android.git
+git clone https://github.com/christopher-vn/Divi-dead_android.git
 cd Divi-dead_android
 ```
 
-If you already cloned without `--recursive`:
-```bash
-git submodule update --init --recursive
-```
+No `--recursive` flag needed — SDL2 is fetched automatically by CMake.
 
 ### 2. Add game assets
 
@@ -28,12 +25,16 @@ into `app/src/main/assets/`.
 
 ### 3. Build
 
-Open in Android Studio → Run, or:
+Open in Android Studio → Sync → Run, or:
 ```bash
 ./gradlew assembleDebug
 ```
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+**Note:** The first build will take longer because CMake downloads SDL2,
+SDL_image, SDL_mixer, and SDL_ttf from GitHub. Subsequent builds use the
+cached downloads.
 
 ## Features
 
@@ -56,12 +57,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 │   ├── build.gradle                    # AGP 8.7 config
 │   ├── proguard-rules.pro
 │   ├── jni/
-│   │   ├── CMakeLists.txt              # NDK CMake build
-│   │   ├── SDL/                        # SDL2 submodules (auto-cloned)
-│   │   │   ├── SDL/                    # SDL2 core
-│   │   │   ├── SDL_image/              # Image loading
-│   │   │   ├── SDL_mixer/              # Audio mixing
-│   │   │   └── SDL_ttf/                # TrueType font rendering
+│   │   ├── CMakeLists.txt              # NDK CMake build (FetchContent for SDL2)
 │   │   └── src/
 │   │       ├── src/                    # Engine source (patched)
 │   │       │   ├── main.c              # + SDL_main.h for Android
@@ -85,25 +81,21 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 └── gradlew
 ```
 
-## SDL2 submodules
+## How SDL2 is handled
 
-SDL2 is included as 4 git submodules in `app/jni/SDL/`:
+SDL2, SDL_image, SDL_mixer, and SDL_ttf are **automatically downloaded**
+by CMake using `FetchContent` during the configure step. No git submodules,
+no manual cloning — just build and CMake handles the rest.
 
-| Submodule | Branch | Purpose |
-|-----------|--------|---------|
-| `SDL` | `SDL2` | SDL2 core library |
-| `SDL_image` | `release-2.8.x` | Image loading (BMP, PNG, JPG) |
-| `SDL_mixer` | `release-2.8.x` | Audio mixing (OGG, MIDI, WAV) |
-| `SDL_ttf` | `release-2.24.x` | TrueType font rendering |
-
-These are built from source alongside the engine via CMake.
+The first build downloads ~50 MB of SDL2 source code (cached in
+`~/.gradle/cxx/` for subsequent builds).
 
 ## Build requirements
 
 - Android Studio Narwhal (2025.1.1)+ or JDK 17 + SDK + NDK
 - Android Gradle Plugin 8.7.2 (in build.gradle)
 - Gradle 8.11.1 (wrapper included)
-- NDK r25+
+- NDK r25+ (you have r27 — fine)
 - CMake 3.22.1+ (bundled with Android SDK)
 
 ## Engine patches
@@ -134,12 +126,25 @@ python tools/repack_sg.py SG.DL1 AASTART.AB AASTART.RU.AB -o SG.RU.DL1
 ## Troubleshooting
 
 ### "SDL2 not found!" CMake error
-Run `git submodule update --init --recursive` to clone SDL2.
+This should not happen anymore — CMake downloads SDL2 automatically.
+If you see this error, make sure you have network access during the
+configure step. CMake caches the download in `~/.gradle/cxx/`.
 
 ### Gradle sync fails
 Make sure you're using Gradle 8.11 (the wrapper handles this).
-If Android Studio prompts to upgrade AGP, you can accept — it should be
-backwards compatible.
+If Android Studio prompts to upgrade AGP, accept.
+
+### CMake FetchContent download fails
+If the download fails (network issues), you can manually clone SDL2:
+```bash
+cd app/jni
+mkdir -p SDL && cd SDL
+git clone --branch SDL2 https://github.com/libsdl-org/SDL.git
+git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
+git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
+git clone --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
+```
+Then CMake will use the local copies instead of downloading.
 
 ### App crashes on launch
 Check logcat: `adb logcat -s SDL DiviDead`

@@ -4,24 +4,55 @@ project(DiviDead C)
 set(ANDROID TRUE CACHE BOOL "" FORCE)
 set(SDL_STATIC TRUE CACHE BOOL "" FORCE)
 
-# SDL2 subprojects - must be cloned into app/jni/SDL/
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/SDL/SDL/CMakeLists.txt")
-    add_subdirectory(SDL/SDL)
-    add_subdirectory(SDL/SDL_image)
-    add_subdirectory(SDL/SDL_mixer)
-    add_subdirectory(SDL/SDL_ttf)
-    set(SDL2_LIBS SDL2 SDL2_image SDL2_mixer SDL2_ttf)
-    set(SDL2_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/SDL/SDL/include)
-else()
-    message(FATAL_ERROR "SDL2 not found! Clone SDL2 libraries into app/jni/SDL/:
-  cd app/jni
-  mkdir -p SDL && cd SDL
-  git clone --depth 1 --branch SDL2 https://github.com/libsdl-org/SDL.git
-  git clone --depth 1 --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
-  git clone --depth 1 --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
-  git clone --depth 1 --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
-")
-endif()
+# ----------------------------------------------------------------------------
+# FetchContent: automatically download SDL2 and friends during CMake configure
+# No need for git submodules or manual cloning.
+# ----------------------------------------------------------------------------
+
+include(FetchContent)
+
+# SDL2 core
+FetchContent_Declare(
+    SDL
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG SDL2
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL)
+
+# SDL_image
+FetchContent_Declare(
+    SDL_image
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+    GIT_TAG release-2.8.x
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL_image)
+
+# SDL_mixer
+FetchContent_Declare(
+    SDL_mixer
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
+    GIT_TAG release-2.8.x
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL_mixer)
+
+# SDL_ttf
+FetchContent_Declare(
+    SDL_ttf
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+    GIT_TAG release-2.24.x
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL_ttf)
+
+set(SDL2_LIBS SDL2 SDL2_image SDL2_mixer SDL2_ttf)
+set(SDL2_INCLUDES ${sdl_SOURCE_DIR}/include)
+
+# ----------------------------------------------------------------------------
+# Divi-Dead engine sources
+# ----------------------------------------------------------------------------
 
 set(DIVIDEAD_SOURCES
     src/src/main.c
