@@ -1,1 +1,1 @@
-#include "SDL2/SDL_version.h"
+#include <SDL2/SDL_version.h>
