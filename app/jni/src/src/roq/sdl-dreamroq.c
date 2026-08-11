@@ -25,8 +25,20 @@ static int32_t oss_audio_fd = -1;
 #include <alsa/asoundlib.h>
 static snd_pcm_t *handle;
 #else
-#include <portaudio.h>
-static PaStream *apu_stream;
+/* PortAudio stubs - not available on Android, use SDL_audio instead */
+typedef void PaStream;
+#define paNoFlag 0
+static PaStream *apu_stream = NULL;
+static inline int Pa_Initialize(void) { return 0; }
+static inline int Pa_Terminate(void) { return 0; }
+static inline int Pa_GetDefaultOutputDevice(void) { return 0; }
+typedef struct { int device; int channelCount; int sampleFormat; void *hostApiSpecificStreamInfo; } PaStreamParameters;
+#define paInt16 0x00000008
+static inline int Pa_OpenStream(PaStream **s, const void *i, const void *o, int f, int sz, int f2, void *c, void *d) { (void)i; (void)o; (void)f; (void)sz; (void)f2; (void)c; (void)d; *s = (PaStream*)1; return 0; }
+static inline int Pa_StartStream(PaStream *s) { (void)s; return 0; }
+static inline int Pa_StopStream(PaStream *s) { (void)s; return 0; }
+static inline int Pa_CloseStream(PaStream *s) { (void)s; return 0; }
+static inline int Pa_WriteStream(PaStream *s, const void *b, unsigned long f) { (void)s; (void)b; (void)f; return 0; }
 #endif
 
 
