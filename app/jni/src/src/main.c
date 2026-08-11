@@ -210,7 +210,7 @@ void PROGRAM_EXIT_ERROR(char *format, ...) {
 	PROGRAM_EXIT(-1);
 }
 
-int process_exit(const SDL_Event *event) {
+int process_exit(void *userdata, const SDL_Event *event) {
 	if (event->type == SDL_QUIT) PROGRAM_EXIT(0);
 	return 1;
 }
@@ -787,7 +787,7 @@ void sdl_init() {
 	}
 
 	SDL_JoystickOpen(0);
-	SDL_SetEventFilter(process_exit);
+	SDL_SetEventFilter(process_exit, NULL);
 	(void)0;
 	prepare_rects();
 }
