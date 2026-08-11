@@ -92,7 +92,9 @@ target_include_directories(dividead PRIVATE
     src/src
     src/RES
     src/src/roq
+    include                      # Wrapper: SDL/ -> SDL2/
     ${SDL2_INCLUDES}
+    ${SDL2_INCLUDES}/SDL2       # For direct SDL2/ includes
 )
 
 target_compile_definitions(dividead PRIVATE
