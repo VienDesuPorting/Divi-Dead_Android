@@ -50,9 +50,12 @@ static SDL_Surface* video_sdl_surface;
 static int32_t quit_cb()
 {
 	SDL_Event event;
-	Uint8 *keystate = SDL_GetKeyState(NULL);
+	const Uint8 *keystate = SDL_GetKeyboardState(NULL);
     SDL_PollEvent(&event);
-    if (keystate[BUTTON_A_DEFINE] || keystate[BUTTON_B_DEFINE] || keystate[BUTTON_EXIT_KEY] || keystate[BUTTON_D_DEFINE])
+    if (keystate[SDL_GetScancodeFromKey(BUTTON_A_DEFINE)] ||
+        keystate[SDL_GetScancodeFromKey(BUTTON_B_DEFINE)] ||
+        keystate[SDL_GetScancodeFromKey(BUTTON_EXIT_KEY)] ||
+        keystate[SDL_GetScancodeFromKey(BUTTON_D_DEFINE)])
     {
 		return 1;
 	}
