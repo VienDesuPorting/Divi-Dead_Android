@@ -16,8 +16,8 @@
         android:largeHeap="true">
 
         <activity
-            android:name="org.libsdl.app.SDLActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:name="com.dividead.android.DiviDeadActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|navigation|uiMode|fontScale"
             android:screenOrientation="landscape"
             android:exported="true">
             <intent-filter>

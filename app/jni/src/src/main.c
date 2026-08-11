@@ -17,6 +17,10 @@ KOS_INIT_FLAGS(INIT_DEFAULT);
 #include <SDL/SDL_mutex.h>
 #include <SDL/SDL_ttf.h>
 
+#ifdef __ANDROID__
+#include <SDL/SDL_main.h>
+#endif
+
 #include "main.h"
 #include "touch_input.h"
 

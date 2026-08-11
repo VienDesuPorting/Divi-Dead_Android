@@ -1,4 +1,6 @@
-apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.dividead.android'
@@ -17,10 +19,14 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments '-DANDROID_STL=c++_static'
-                arguments '-DANDROID_PLATFORM=android-21'
-                cFlags '-D__ANDROID__', '-DHOME_DIRECTORY', '-DGAME_HOME_DIRECTORY',
-                       '-DADJUST_FONT_SIZE_DYNAMIC', '-DENABLE_VIDEO_ROQ', '-DSJIS_SUPPORT'
+                arguments '-DANDROID_STL=c++_static',
+                          '-DANDROID_PLATFORM=android-21'
+                cFlags '-D__ANDROID__',
+                       '-DHOME_DIRECTORY',
+                       '-DGAME_HOME_DIRECTORY',
+                       '-DADJUST_FONT_SIZE_DYNAMIC',
+                       '-DENABLE_VIDEO_ROQ',
+                       '-DSJIS_SUPPORT'
             }
         }
     }
@@ -28,6 +34,7 @@ android {
     externalNativeBuild {
         cmake {
             path 'jni/CMakeLists.txt'
+            version '3.22.1'
         }
     }
 
@@ -41,6 +48,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             debuggable true
@@ -54,4 +62,13 @@ android {
         pickFirst '**/libSDL2_mixer.so'
         pickFirst '**/libSDL2_ttf.so'
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 }
