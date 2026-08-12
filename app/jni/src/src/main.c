@@ -836,17 +836,83 @@ void lang_init() {
 
 	if (_file_exists(temp)) 
 	{
+#ifdef __ANDROID__
+		/* On Android, use SDL_RWops to read from assets */
+		SDL_RWops *rw = SDL_RWFromFile(temp, "rb");
+		if (rw == NULL) {
+			printf("Can't open '%s'\n", temp);
+			return;
+		}
+		/* Read the entire file into memory, then parse line by line */
+		{
+			char buf[0x800];
+			int total = SDL_RWread(rw, buf, 1, sizeof(buf)-1);
+			buf[total] = 0;
+			SDL_RWclose(rw);
+			char *line = buf;
+			while (*line && n < 12) {
+				char *eol = strchr(line, '\n');
+				if (eol) *eol = 0;
+				int len = strlen(line);
+				if (len > 0 && line[len-1] == '\r') line[--len] = 0;
+				if (len > 0x30) line[0x30] = 0;
+				strcpy(lang_texts[n], line);
+				for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
+					switch (lang_texts[n][m]) {
+						case '\n': case '\r':
+							lang_texts[n][m] = 0;
+							m = l;
+						break;
+					}
+				}
+				n++;
+				if (eol) line = eol + 1; else break;
+			}
+		}
+		SDL_RWclose(rw);
+		goto lang_texts_loaded;
+#else
 		if ((f = fopen(temp, "rb")) == NULL) {
 			printf("Can't open '%s'\n", temp);
 			return;
 		}
+#endif
 	}
 	else if (_file_exists(temp2)) 
 	{
+#ifdef __ANDROID__
+		{
+			SDL_RWops *rw = SDL_RWFromFile(temp2, "rb");
+			if (rw == NULL) { printf("Can't open '%s'\n", temp2); return; }
+			char buf[0x800];
+			int total = SDL_RWread(rw, buf, 1, sizeof(buf)-1);
+			buf[total] = 0;
+			SDL_RWclose(rw);
+			char *line = buf;
+			while (*line && n < 12) {
+				char *eol = strchr(line, '\n');
+				if (eol) *eol = 0;
+				int len = strlen(line);
+				if (len > 0 && line[len-1] == '\r') line[--len] = 0;
+				if (len > 0x30) line[0x30] = 0;
+				strcpy(lang_texts[n], line);
+				for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
+					switch (lang_texts[n][m]) {
+						case '\n': case '\r':
+							lang_texts[n][m] = 0; m = l; break;
+					}
+				}
+				n++;
+				if (eol) line = eol + 1; else break;
+			}
+		}
+		goto lang_texts_loaded;
+#else
 		if ((f = fopen(temp2, "rb")) == NULL) {
 			printf("Can't open '%s'\n", temp);
 			return;
 		}
+#endif
 	}
 	else
 	{
@@ -855,6 +921,7 @@ void lang_init() {
 		return;	
 	}
 
+#ifndef __ANDROID__
 	while (!feof(f)) {
 		fgets(lang_texts[n], 0x30, f);
 		for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
@@ -868,6 +935,8 @@ void lang_init() {
 		n++;
 	}
 	fclose(f);
+lang_texts_loaded:
+	;
 }
 
 void vfs_init() {

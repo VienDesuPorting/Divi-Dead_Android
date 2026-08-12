@@ -38,3 +38,4 @@ void android_redirect_stdio(void) {
 }
 
 #endif /* __ANDROID__ */
+#endif /* __ANDROID__ */

@@ -61,4 +61,18 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
 }
 #define SDL_SetVideoMode(w, h, bpp, flags) SDL_SetVideoMode_compat((w), (h), (bpp), (flags))
 
+
+/* ---- Android asset path fix ---- */
+#ifdef __ANDROID__
+/* On Android, SDL2 reads files from assets/ when given a relative path.
+ * But the engine prepends "./" (from dirname()), which makes SDL2 try
+ * the filesystem instead. Strip "./" prefix so assets work. */
+static inline SDL_RWops *SDL_RWFromFile_android_fix(const char *file, const char *mode) {
+    if (file == NULL) return NULL;
+    while (file[0] == '.' && file[1] == '/') file += 2;
+    return SDL_RWFromFile(file, mode);
+}
+#define SDL_RWFromFile(file, mode) SDL_RWFromFile_android_fix((file), (mode))
+#endif
+
 #endif /* SDL12_COMPAT_SHIM_H */
