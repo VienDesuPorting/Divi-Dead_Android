@@ -531,12 +531,28 @@ void GAME_UPDATE_DEBUG_INFO() {
 }
 
 void GAME_SCREEN_UPDATE(SDL_Surface *from) {
+#ifdef __ANDROID__
+	/* Scale the 640x480 surface to fill the window */
+	if (from->w != screen_video->w || from->h != screen_video->h) {
+		SDL_Rect dst = {0, 0, screen_video->w, screen_video->h};
+		SDL_BlitScaled(from, NULL, screen_video, &dst);
+	} else {
+		SDL_BlitSurface(from, NULL, screen_video, NULL);
+	}
+	SDL_Flip(screen_video);
+#else
 	SDL_BlitSurface(from, NULL, screen_video, NULL);
 	SDL_Flip(screen_video);
+#endif
 	GAME_UPDATE_DEBUG_INFO();
 }
 
 void GAME_SCREEN_UPDATE_RECT(SDL_Surface *from, SDL_Rect *rect) {
+#ifdef __ANDROID__
+	/* On Android, always do a full scaled screen update */
+	(void)rect;
+	GAME_SCREEN_UPDATE(from);
+#else
 	if (rect == NULL) {
 		GAME_SCREEN_UPDATE(from);
 		return;
@@ -548,14 +564,19 @@ void GAME_SCREEN_UPDATE_RECT(SDL_Surface *from, SDL_Rect *rect) {
 	#else
 		SDL_Flip(screen_video);
 	#endif
-	
-	//if (toggle_info) message_info("%s:%d", save.script, scrp - script);
+#endif
 }
 
 //#define UPDATE_RECTS_OPTIMIZED
 //#define UPDATE_METHOD_1
 
 void GAME_SCREEN_UPDATE_RECTS(SDL_Surface *from, int numrects, SDL_Rect *rects) {
+#ifdef __ANDROID__
+	/* On Android, always do a full scaled screen update */
+	(void)numrects;
+	(void)rects;
+	GAME_SCREEN_UPDATE(from);
+#else
 	int n;
 	#ifdef UPDATE_METHOD_1
 		SDL_BlitSurface(from, NULL, screen_video, NULL);
@@ -570,6 +591,7 @@ void GAME_SCREEN_UPDATE_RECTS(SDL_Surface *from, int numrects, SDL_Rect *rects) 
 	#endif	
 	
 	//if (toggle_info) message_info("%s:%d", save.script, scrp - script);
+#endif
 }
 
 SDL_Rect rs[3072 * 2 * 4];
@@ -966,6 +988,14 @@ void game_init() {
 
 int main(int argc, char* argv[]) 
 {
+#ifdef __ANDROID__
+	/* Redirect stdout/stderr to Android logcat so we can see engine output */
+	{
+		extern void android_redirect_stdio(void);
+		android_redirect_stdio();
+	}
+#endif
+
 	uint_fast8_t result_movie = 0;
 #ifdef GAME_HOME_DIRECTORY
 	if (argc < 2)
