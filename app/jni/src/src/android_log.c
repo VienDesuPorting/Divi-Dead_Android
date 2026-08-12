@@ -16,9 +16,9 @@ static void *log_thread_func(void *arg) {
     char buf[512];
     ssize_t n;
     while ((n = read(pfd[0], buf, sizeof(buf) - 1)) > 0) {
-        buf[n] = '\\0';
+        buf[n] = '\0';
         /* Remove trailing newline */
-        if (n > 0 && buf[n-1] == '\\n') buf[n-1] = '\\0';
+        if (n > 0 && buf[n-1] == '\n') buf[n-1] = '\0';
         __android_log_write(ANDROID_LOG_INFO, tag, buf);
     }
     return NULL;
@@ -37,5 +37,4 @@ void android_redirect_stdio(void) {
     pthread_detach(log_thread);
 }
 
-#endif /* __ANDROID__ */
 #endif /* __ANDROID__ */

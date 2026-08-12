@@ -825,26 +825,18 @@ void lang_init() {
 	snprintf(temp, sizeof(temp), "%s/%s%s/%s.TXT", game_directory, FILE_PREFIX, ALTERNATE_LANG, language);
 	snprintf(temp2, sizeof(temp2), "%s/%s%s/%s.txt", game_directory, FILE_PREFIX, ALTERNATE_LANG, language);
 #else
-#ifdef CLASSICMAC
-	sprintf(temp, ":%s%s:%s.TXT", FILE_PREFIX, ALTERNATE_LANG, language);
-	sprintf(temp2, ":%s%s:%s.txt", FILE_PREFIX, ALTERNATE_LANG, language);
-#else
 	sprintf(temp, "%s%s/%s.TXT", FILE_PREFIX, ALTERNATE_LANG, language);
 	sprintf(temp2, "%s%s/%s.txt", FILE_PREFIX, ALTERNATE_LANG, language);
 #endif
-#endif
 
-	if (_file_exists(temp)) 
-	{
 #ifdef __ANDROID__
-		/* On Android, use SDL_RWops to read from assets */
-		SDL_RWops *rw = SDL_RWFromFile(temp, "rb");
-		if (rw == NULL) {
-			printf("Can't open '%s'\n", temp);
-			return;
-		}
-		/* Read the entire file into memory, then parse line by line */
-		{
+	/* On Android, use SDL_RWops to read from assets */
+	{
+		SDL_RWops *rw = NULL;
+		if (_file_exists(temp)) rw = SDL_RWFromFile(temp, "rb");
+		else if (_file_exists(temp2)) { strcpy(temp, temp2); rw = SDL_RWFromFile(temp, "rb"); }
+		
+		if (rw) {
 			char buf[0x800];
 			int total = SDL_RWread(rw, buf, 1, sizeof(buf)-1);
 			buf[total] = 0;
@@ -855,64 +847,35 @@ void lang_init() {
 				if (eol) *eol = 0;
 				int len = strlen(line);
 				if (len > 0 && line[len-1] == '\r') line[--len] = 0;
-				if (len > 0x30) line[0x30] = 0;
+				if (len > 0x2F) line[0x2F] = 0;
 				strcpy(lang_texts[n], line);
 				for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
-					switch (lang_texts[n][m]) {
-						case '\n': case '\r':
-							lang_texts[n][m] = 0;
-							m = l;
-						break;
+					if (lang_texts[n][m] == '\n' || lang_texts[n][m] == '\r') {
+						lang_texts[n][m] = 0; m = l;
 					}
 				}
 				n++;
 				if (eol) line = eol + 1; else break;
 			}
+		} else {
+			printf("File '%s' doesn't exists\n", temp);
+			sprintf(temp, "%sLANG/%s.TXT", FILE_PREFIX, language);
 		}
-		SDL_RWclose(rw);
-		goto lang_texts_loaded;
+	}
 #else
+	if (_file_exists(temp)) 
+	{
 		if ((f = fopen(temp, "rb")) == NULL) {
 			printf("Can't open '%s'\n", temp);
 			return;
 		}
-#endif
 	}
 	else if (_file_exists(temp2)) 
 	{
-#ifdef __ANDROID__
-		{
-			SDL_RWops *rw = SDL_RWFromFile(temp2, "rb");
-			if (rw == NULL) { printf("Can't open '%s'\n", temp2); return; }
-			char buf[0x800];
-			int total = SDL_RWread(rw, buf, 1, sizeof(buf)-1);
-			buf[total] = 0;
-			SDL_RWclose(rw);
-			char *line = buf;
-			while (*line && n < 12) {
-				char *eol = strchr(line, '\n');
-				if (eol) *eol = 0;
-				int len = strlen(line);
-				if (len > 0 && line[len-1] == '\r') line[--len] = 0;
-				if (len > 0x30) line[0x30] = 0;
-				strcpy(lang_texts[n], line);
-				for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
-					switch (lang_texts[n][m]) {
-						case '\n': case '\r':
-							lang_texts[n][m] = 0; m = l; break;
-					}
-				}
-				n++;
-				if (eol) line = eol + 1; else break;
-			}
-		}
-		goto lang_texts_loaded;
-#else
 		if ((f = fopen(temp2, "rb")) == NULL) {
 			printf("Can't open '%s'\n", temp);
 			return;
 		}
-#endif
 	}
 	else
 	{
@@ -921,7 +884,6 @@ void lang_init() {
 		return;	
 	}
 
-#ifndef __ANDROID__
 	while (!feof(f)) {
 		fgets(lang_texts[n], 0x30, f);
 		for (m = 0, l = strlen(lang_texts[n]); m < l; m++) {
@@ -935,8 +897,7 @@ void lang_init() {
 		n++;
 	}
 	fclose(f);
-lang_texts_loaded:
-	;
+#endif
 }
 
 void vfs_init() {
