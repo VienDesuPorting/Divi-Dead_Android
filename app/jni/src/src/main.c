@@ -818,13 +818,6 @@ void sdl_init() {
 			extern SDL_Surface *GAME_IMAGE_GET_EX3(char *, char *, int, int);
 			extern SDL_Surface *interface;
 			extern void prepare_interface_image(SDL_Rect *, SDL_Surface **);
-			extern SDL_Rect interface_title_clip[];
-			extern SDL_Rect interface_main_buttons_clip[];
-			extern SDL_Rect interface_next_clip[];
-			extern SDL_Surface *interface_title_images[];
-			extern SDL_Surface *interface_main_buttons_images[];
-			extern SDL_Surface *interface_next_images[];
-			extern int interface_next_count;
 			extern int IMAGE_CACHE_MAX;
 			int n;
 			
