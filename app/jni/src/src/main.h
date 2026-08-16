@@ -73,7 +73,7 @@ extern void lang_postinit();
 #define ORI_SCREEN_WIDTH  640
 #define ORI_SCREEN_HEIGHT 480
 
-#define IMAGE_CACHE_MAX_DEFAULT 15
+#define IMAGE_CACHE_MAX_DEFAULT 30
 
 #define text_margin_top 0
 
@@ -231,3 +231,4 @@ extern IMAGE_CACHE image_cache[32];
 extern char game_directory[512];
 
 #endif
+extern int touch_menu_select;

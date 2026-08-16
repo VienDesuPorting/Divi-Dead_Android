@@ -1,4 +1,5 @@
 #include "menus.h"
+#include "touch_input.h"
 
 SDL_Surface *snapshot_first = NULL;
 SDL_Surface *snapshot_last = NULL;
@@ -36,6 +37,10 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 	int n;
 	int lines = 0;
 	int lines_h = font_height + menus_option.h;
+	
+	/* Set menu geometry for touch-to-select */
+	TOUCH_SET_MENU_GEOMETRY(rect_start.x + menus_pos.x, 
+		rect_start.y + menus_pos.y + 4, lines_h, lines);
 	int height;
 	SDL_Surface *snapshot;
 	
@@ -94,10 +99,15 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 		#endif
 
 		//if ((keys & K_A) || (keys & K_MODE)) {
+		/* Check if touch selected a specific menu item */
+		if (touch_menu_select >= 0 && touch_menu_select < lines) {
+			zpos = touch_menu_select;
+			touch_menu_select = -1;
+			update = 1;
+		}
+		
 		if ((keys & K_A)) {
-			//printf("GAME_MENU_SHOW_EX: Key A\n");
 			menu_mode = ((keys & K_MODE) != 0);
-			//printf("GAME_MENU_SHOW_EX: menu mode\n");
 			if (!menu[zpos].callback) break;
 			//printf("GAME_MENU_SHOW_EX: Valid callbackA\n");
 			if ((retval = menu[zpos].callback(zpos)) != 0) {

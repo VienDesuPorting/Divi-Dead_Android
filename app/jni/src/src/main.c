@@ -78,6 +78,9 @@ TTF_Font *font2 = NULL; int font2_height = 0;
 
 SDL_Surface *screen = NULL, *screen_video = NULL, *interface = NULL;
 SDL_Window *g_sdl_window = NULL;
+
+/* Touch menu selection: when set to >= 0, the menu should jump to this item */
+int touch_menu_select = -1;
 SDL_PixelFormat screen_format;
 
 int done = 0, game_end = 0, swap_buttons = 0;

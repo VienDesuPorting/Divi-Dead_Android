@@ -11,16 +11,14 @@ FSLI files[0x2000];
 int files_count;
 
 #ifdef COMP_BUFFER_DYN
-	uint8_t *temp1 = NULL;
-	uint8_t *temp2 = NULL;
+	/* Use static buffers to avoid malloc/free on every image load */
+	static uint8_t temp1_buf[0x100000];  /* 1MB for compressed data */
+	static uint8_t temp2_buf[0x100000];  /* 1MB for decompressed data */
+	uint8_t *temp1 = temp1_buf;
+	uint8_t *temp2 = temp2_buf;
 	
 	void temp_update(uint8_t **ptr, int newlen) {
-		if (*ptr) free(*ptr);
-		if (newlen > 0) {
-			*ptr = malloc(newlen);
-		} else {
-			*ptr = NULL;
-		}
+		/* No-op: buffers are static now */
 	}
 #else
 	uint8_t temp1[0xD0000];
@@ -132,18 +130,51 @@ FSLI *VFS_FIND(char *name) {
 	return NULL;
 }
 
+/* Cache PAK file handles to avoid repeated open/close on Android */
+#define VFS_MAX_PAKS 8
+static SDL_RWops *vfs_cached_rwops[VFS_MAX_PAKS] = {0};
+static char vfs_cached_paths[VFS_MAX_PAKS][512] = {0};
+static int vfs_pak_count = 0;
+
+static SDL_RWops *VFS_GET_PAK_HANDLE(const char *path) {
+	int n;
+	/* Check if we already have this PAK open */
+	for (n = 0; n < vfs_pak_count; n++) {
+		if (stricmp(vfs_cached_paths[n], path) == 0 && vfs_cached_rwops[n]) {
+			return vfs_cached_rwops[n];
+		}
+	}
+	/* Not found - open it */
+	if (vfs_pak_count >= VFS_MAX_PAKS) {
+		/* Cache full - close oldest */
+		if (vfs_cached_rwops[0]) {
+			SDL_RWclose(vfs_cached_rwops[0]);
+		}
+		memmove(&vfs_cached_rwops[0], &vfs_cached_rwops[1], 
+			(VFS_MAX_PAKS - 1) * sizeof(SDL_RWops*));
+		memmove(&vfs_cached_paths[0], &vfs_cached_paths[1],
+			(VFS_MAX_PAKS - 1) * 512);
+		vfs_pak_count--;
+	}
+	SDL_RWops *f = SDL_RWFromFile(path, "rb");
+	if (f) {
+		strncpy(vfs_cached_paths[vfs_pak_count], path, 511);
+		vfs_cached_rwops[vfs_pak_count] = f;
+		vfs_pak_count++;
+	}
+	return f;
+}
+
 int VFS_READ(FSLI *slice, uint8_t *buffer) {
-	SDL_RWops *f;
 	if (!slice) return -1;
-	if ((f = SDL_RWFromFile(slice->pak->path, "rb")) != NULL) {
+	SDL_RWops *f = VFS_GET_PAK_HANDLE(slice->pak->path);
+	if (f != NULL) {
 		SDL_RWseek(f, slice->pos, SEEK_SET);
 		SDL_RWread(f, buffer, slice->len, 1);
-		SDL_RWclose(f);
 		return slice->len;
 	} else {
 		PROGRAM_EXIT_ERROR("Can't open pak '%s'", slice->pak->path);
 	}
-	
 	return 0;
 }
 

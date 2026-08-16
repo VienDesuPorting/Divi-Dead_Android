@@ -1,13 +1,13 @@
 /*
  * touch_input.c - Touch gesture handling for Android/mobile platforms
  *
- * Gesture to key mapping:
- *   - Tap (quick touch)       -> K_A (select/confirm)
- *   - Swipe up                 -> K_L (open main menu)
- *   - Swipe down               -> K_R (open gallery/extra menu)
- *   - Swipe left               -> K_LEFT
- *   - Swipe right              -> K_RIGHT
- *   - Long press (hold 500ms)  -> K_B (cancel/back)
+ * Gestures:
+ *   - Tap on menu item    -> Select that item (K_A)
+ *   - Tap elsewhere        -> Advance text (K_A)
+ *   - Swipe up             -> Open main menu (K_L)
+ *   - Swipe down           -> Open gallery (K_R)
+ *   - Swipe left/right     -> Navigate (K_LEFT/K_RIGHT)
+ *   - Long press (500ms)   -> Cancel (K_B)
  */
 
 #include "SDL/SDL.h"
@@ -75,7 +75,10 @@ uint32_t TOUCH_HANDLE_EVENT(SDL_Event *event) {
                 if (touch_state.long_press_fired) break;
 
                 if (abs_dx < TAP_DISTANCE && abs_dy < TAP_DISTANCE) {
-                    if (duration < TAP_MAX_TIME) result |= K_A;
+                    if (duration < TAP_MAX_TIME) {
+                        /* Tap - always send K_A (select/advance text) */
+                        result |= K_A;
+                    }
                 } else if (duration < SWIPE_MAX_TIME) {
                     if (abs_dx > abs_dy) {
                         result |= (dx > 0) ? K_RIGHT : K_LEFT;
@@ -102,4 +105,46 @@ uint32_t TOUCH_CHECK_LONG_PRESS(void) {
         }
     }
     return 0;
+}
+
+/* Menu geometry for tap-to-select */
+typedef struct {
+    int active;       /* Is a menu currently shown? */
+    int x, y;         /* Top-left of menu area */
+    int item_h;       /* Height of each menu item */
+    int count;        /* Number of items */
+} MenuGeometry;
+
+static MenuGeometry menu_geom = {0};
+
+void TOUCH_SET_MENU_GEOMETRY(int x, int y, int item_h, int count) {
+    menu_geom.active = 1;
+    menu_geom.x = x;
+    menu_geom.y = y;
+    menu_geom.item_h = item_h;
+    menu_geom.count = count;
+}
+
+void TOUCH_CLEAR_MENU_GEOMETRY(void) {
+    menu_geom.active = 0;
+}
+
+/* Get the menu item index at the given touch coordinates (0.0-1.0).
+ * Returns -1 if not tapping on a menu item.
+ * screen_w/h are the actual window dimensions for coordinate conversion.
+ */
+int TOUCH_GET_MENU_ITEM(float touch_x, float touch_y, int screen_w, int screen_h) {
+    if (!menu_geom.active || menu_geom.count <= 0) return -1;
+    
+    /* Convert from normalized touch coords to 640x480 game coords */
+    int game_x = (int)(touch_x * 640);
+    int game_y = (int)(touch_y * 480);
+    
+    /* Check if tap is within the menu area */
+    if (game_y < menu_geom.y) return -1;
+    
+    int item = (game_y - menu_geom.y) / menu_geom.item_h;
+    if (item < 0 || item >= menu_geom.count) return -1;
+    
+    return item;
 }
