@@ -136,11 +136,28 @@ void TOUCH_CLEAR_MENU_GEOMETRY(void) {
 int TOUCH_GET_MENU_ITEM(float touch_x, float touch_y, int screen_w, int screen_h) {
     if (!menu_geom.active || menu_geom.count <= 0) return -1;
     
-    /* Convert from normalized touch coords to 640x480 game coords */
-    int game_x = (int)(touch_x * 640);
-    int game_y = (int)(touch_y * 480);
+    /* Convert normalized touch coords to screen pixels */
+    int screen_x = (int)(touch_x * screen_w);
+    int screen_y = (int)(touch_y * screen_h);
     
-    /* Check if tap is within the menu area */
+    /* Calculate the game's render area on screen (letterboxed 4:3) */
+    double scale_x = (double)screen_w / 640.0;
+    double scale_y = (double)screen_h / 480.0;
+    double scale = scale_x < scale_y ? scale_x : scale_y;
+    int game_w = (int)(640 * scale);
+    int game_h = (int)(480 * scale);
+    int offset_x = (screen_w - game_w) / 2;
+    int offset_y = (screen_h - game_h) / 2;
+    
+    /* Check if tap is within the game render area (not on black bars) */
+    if (screen_x < offset_x || screen_x >= offset_x + game_w) return -1;
+    if (screen_y < offset_y || screen_y >= offset_y + game_h) return -1;
+    
+    /* Convert screen pixels to 640x480 game coordinates */
+    int game_x = (int)((screen_x - offset_x) * 640.0 / game_w);
+    int game_y = (int)((screen_y - offset_y) * 480.0 / game_h);
+    
+    /* Find which menu item was tapped */
     if (game_y < menu_geom.y) return -1;
     
     int item = (game_y - menu_geom.y) / menu_geom.item_h;

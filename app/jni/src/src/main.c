@@ -809,6 +809,41 @@ void sdl_init() {
 		SDL_BlitSurface(screen, NULL, screen_video, NULL);
 #endif
 		SDL_Flip(screen_video);
+		
+		/* Preload game data while splash is visible */
+		#ifdef __ANDROID__
+		{
+			extern void vfs_init(void);
+			extern int FLIST_LOAD(void);
+			extern SDL_Surface *GAME_IMAGE_GET_EX3(char *, char *, int, int);
+			extern SDL_Surface *interface;
+			extern void prepare_interface_image(SDL_Rect *, SDL_Surface **);
+			extern SDL_Rect interface_title_clip[];
+			extern SDL_Rect interface_main_buttons_clip[];
+			extern SDL_Rect interface_next_clip[];
+			extern SDL_Surface *interface_title_images[];
+			extern SDL_Surface *interface_main_buttons_images[];
+			extern SDL_Surface *interface_next_images[];
+			extern int interface_next_count;
+			extern int IMAGE_CACHE_MAX;
+			int n;
+			
+			/* Increase cache for preloaded images */
+			IMAGE_CACHE_MAX = 30;
+			
+			printf("Preloading PAK files...\n");
+			vfs_init();
+			printf("Preloading FLIST...\n");
+			FLIST_LOAD();
+			printf("Preloading WAKU_P (interface)...\n");
+			interface = GAME_IMAGE_GET_EX3("WAKU_P", NULL, 0, 0);
+			SDL_SetColorKey(interface, 0, 0);
+			for (n = 0; n < 4; n++) prepare_interface_image(&interface_main_buttons_clip[n], interface_main_buttons_images + n);
+			for (n = 0; n < 3; n++) prepare_interface_image(&interface_title_clip[n], interface_title_images + n);
+			for (n = 0; n < interface_next_count; n++) prepare_interface_image(&interface_next_clip[n], interface_next_images + n);
+			printf("Preload complete.\n");
+		}
+		#endif
 	}
 	
 	if (TTF_Init() < 0) PROGRAM_EXIT_ERROR("Can't initialize TTF");
