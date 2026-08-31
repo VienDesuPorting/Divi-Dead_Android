@@ -78,6 +78,9 @@ TTF_Font *font2 = NULL; int font2_height = 0;
 
 SDL_Surface *screen = NULL, *screen_video = NULL, *interface = NULL;
 SDL_Window *g_sdl_window = NULL;
+static int vfs_already_initialized = 0;  /* Skip re-init on Android preload */
+static int interface_already_loaded = 0;  /* Skip re-loading WAKU_P */
+static int flist_already_loaded = 0;  /* Skip re-loading FLIST */
 
 /* Touch menu selection: when set to >= 0, the menu should jump to this item */
 int touch_menu_select = -1;
@@ -328,7 +331,24 @@ void KEYS_UPDATE() {
 		#ifdef __ANDROID__
 		{
 			uint32_t touch_key = TOUCH_HANDLE_EVENT(&event);
-			if (touch_key) joy_push_keys(+touch_key);
+			if (touch_key & K_A) {
+				/* Check if this is a menu tap */
+				int item = -1;
+				if (event.type == SDL_FINGERUP) {
+					item = TOUCH_GET_MENU_ITEM(
+						event.tfinger.x, event.tfinger.y,
+						screen_video->w, screen_video->h);
+				}
+				if (item >= 0) {
+					touch_menu_select = item;
+				} else {
+					joy_push_keys(+K_A);
+				}
+				touch_key &= ~K_A;
+			}
+			if (touch_key) {
+				joy_push_keys(+touch_key);
+			}
 		}
 		#endif
 		switch (event.type) {
@@ -828,12 +848,17 @@ void sdl_init() {
 			vfs_init();
 			printf("Preloading FLIST...\n");
 			FLIST_LOAD();
+			flist_already_loaded = 1;
+			printf("Preloading system data...\n");
+			/* SYS_LOAD needs the PAK files mounted - but save data path
+			 * might not work on Android yet. Just skip for now. */
 			printf("Preloading WAKU_P (interface)...\n");
 			interface = GAME_IMAGE_GET_EX3("WAKU_P", NULL, 0, 0);
 			SDL_SetColorKey(interface, 0, 0);
 			for (n = 0; n < 4; n++) prepare_interface_image(&interface_main_buttons_clip[n], interface_main_buttons_images + n);
 			for (n = 0; n < 3; n++) prepare_interface_image(&interface_title_clip[n], interface_title_images + n);
 			for (n = 0; n < interface_next_count; n++) prepare_interface_image(&interface_next_clip[n], interface_next_images + n);
+			interface_already_loaded = 1;
 			printf("Preload complete.\n");
 		}
 		#endif
@@ -952,6 +977,14 @@ void lang_init() {
 
 void vfs_init() {
 	//if (initialized != 0) return;
+	
+	#ifdef __ANDROID__
+	if (vfs_already_initialized) {
+		printf("vfs_init: already initialized, skipping\n");
+		return;
+	}
+	vfs_already_initialized = 1;
+	#endif
 
 	char temp[512];
 	
@@ -1064,6 +1097,9 @@ void game_init() {
 	for (n = 0; n < interface_next_count; n++) {	
 		prepare_interface_image(&interface_next_clip[n], interface_next_images + n);
 	}
+	#ifdef __ANDROID__
+	interface_already_loaded = 1;
+	#endif
 }
 
 int main(int argc, char* argv[]) 
