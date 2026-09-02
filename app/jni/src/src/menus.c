@@ -37,13 +37,6 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 	int n;
 	int lines = 0;
 	int lines_h = font_height + menus_option.h;
-	
-	/* Set menu geometry for touch-to-select */
-	TOUCH_SET_MENU_GEOMETRY(rect_start.x + menus_pos.x, 
-		rect_start.y + menus_pos.y + 4, lines_h, lines);
-	printf("MENU_GEOM: x=%d y=%d item_h=%d count=%d (rect_start: x=%d y=%d w=%d h=%d)\n",
-		rect_start.x + menus_pos.x, rect_start.y + menus_pos.y + 4,
-		lines_h, lines, rect_start.x, rect_start.y, rect_start.w, rect_start.h);
 	int height;
 	SDL_Surface *snapshot;
 	
@@ -69,6 +62,17 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 	while (menu[lines].text) lines++;
 	
 	height = lines * lines_h;
+	
+	/* Set menu geometry for touch-to-select (after lines is counted!)
+	 * Menu items start at: rect_start.y + title_image_height(44) + 4
+	 * Each item is lines_h pixels tall.
+	 * The X range is the full menu width (rect_start.x to rect_start.x + 240). */
+	{
+		int menu_y = rect_start.y + interface_title_clip[0].h + 4;
+		TOUCH_SET_MENU_GEOMETRY(rect_start.x, menu_y, lines_h, lines);
+		printf("MENU_GEOM: x=%d y=%d item_h=%d count=%d\n",
+			rect_start.x, menu_y, lines_h, lines);
+	}
 	
 	SDL_BlitSurface(snapshot, NULL, screen, NULL);
 
