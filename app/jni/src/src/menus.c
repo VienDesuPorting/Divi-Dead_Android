@@ -41,6 +41,9 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 	/* Set menu geometry for touch-to-select */
 	TOUCH_SET_MENU_GEOMETRY(rect_start.x + menus_pos.x, 
 		rect_start.y + menus_pos.y + 4, lines_h, lines);
+	printf("MENU_GEOM: x=%d y=%d item_h=%d count=%d (rect_start: x=%d y=%d w=%d h=%d)\n",
+		rect_start.x + menus_pos.x, rect_start.y + menus_pos.y + 4,
+		lines_h, lines, rect_start.x, rect_start.y, rect_start.w, rect_start.h);
 	int height;
 	SDL_Surface *snapshot;
 	

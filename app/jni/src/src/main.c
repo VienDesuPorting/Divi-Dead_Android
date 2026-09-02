@@ -23,6 +23,10 @@ KOS_INIT_FLAGS(INIT_DEFAULT);
 
 #include "main.h"
 #include "touch_input.h"
+#ifdef __ANDROID__
+extern int android_extract_assets(void);
+extern const char *android_get_data_path(const char *filename);
+#endif
 
 #ifdef JOYSTICK_ENABLED
 #define joy_commit_range 8192
@@ -338,9 +342,14 @@ void KEYS_UPDATE() {
 					item = TOUCH_GET_MENU_ITEM(
 						event.tfinger.x, event.tfinger.y,
 						screen_video->w, screen_video->h);
+					printf("TOUCH: tap (%.3f,%.3f) screen %dx%d -> item %d\n",
+						event.tfinger.x, event.tfinger.y,
+						screen_video->w, screen_video->h, item);
 				}
 				if (item >= 0) {
+					/* Direct selection: set item AND activate */
 					touch_menu_select = item;
+					joy_push_keys(+K_A);
 				} else {
 					joy_push_keys(+K_A);
 				}
@@ -830,36 +839,30 @@ void sdl_init() {
 #endif
 		SDL_Flip(screen_video);
 		
-		/* Preload game data while splash is visible */
+		/* Extract assets to internal storage while splash is visible */
 		#ifdef __ANDROID__
 		{
-			extern void vfs_init(void);
-			extern int FLIST_LOAD(void);
-			extern SDL_Surface *GAME_IMAGE_GET_EX3(char *, char *, int, int);
-			extern SDL_Surface *interface;
-			extern void prepare_interface_image(SDL_Rect *, SDL_Surface **);
-			extern int IMAGE_CACHE_MAX;
-			int n;
+			/* Extract all game data from assets/ to internal storage.
+			 * On first launch this takes a few seconds (copying ~100MB).
+			 * On subsequent launches the files already exist and it's instant. */
+			printf("Extracting assets to internal storage...\n");
+			android_extract_assets();
 			
-			/* Increase cache for preloaded images */
+			/* Set game_directory to internal storage so all file reads
+			 * use the fast filesystem instead of slow Android assets */
+			const char *data_path = android_get_data_path("SG.DL1");
+			if (data_path) {
+				/* Extract directory from the full path */
+				char dir[512];
+				strncpy(dir, data_path, sizeof(dir) - 1);
+				char *slash = strrchr(dir, '/');
+				if (slash) *slash = 0;
+				snprintf(game_directory, sizeof(game_directory), "%s", dir);
+				printf("game_directory set to: %s\n", game_directory);
+			}
+			
+			/* Increase image cache */
 			IMAGE_CACHE_MAX = 30;
-			
-			printf("Preloading PAK files...\n");
-			vfs_init();
-			printf("Preloading FLIST...\n");
-			FLIST_LOAD();
-			flist_already_loaded = 1;
-			printf("Preloading system data...\n");
-			/* SYS_LOAD needs the PAK files mounted - but save data path
-			 * might not work on Android yet. Just skip for now. */
-			printf("Preloading WAKU_P (interface)...\n");
-			interface = GAME_IMAGE_GET_EX3("WAKU_P", NULL, 0, 0);
-			SDL_SetColorKey(interface, 0, 0);
-			for (n = 0; n < 4; n++) prepare_interface_image(&interface_main_buttons_clip[n], interface_main_buttons_images + n);
-			for (n = 0; n < 3; n++) prepare_interface_image(&interface_title_clip[n], interface_title_images + n);
-			for (n = 0; n < interface_next_count; n++) prepare_interface_image(&interface_next_clip[n], interface_next_images + n);
-			interface_already_loaded = 1;
-			printf("Preload complete.\n");
 		}
 		#endif
 	}

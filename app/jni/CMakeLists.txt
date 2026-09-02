@@ -72,6 +72,7 @@ set(DIVIDEAD_SOURCES
     src/src/sjis_table.c
     src/src/touch_input.c
     src/src/android_log.c
+    src/src/android_asset_extract.c
     src/src/roq/dreamroqlib.c
     src/src/roq/sdl-dreamroq.c
     src/RES/FONT_TTF.c

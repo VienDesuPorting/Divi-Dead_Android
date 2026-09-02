@@ -19,7 +19,8 @@
             android:name="com.dividead.android.DiviDeadActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|navigation|uiMode|fontScale"
             android:screenOrientation="landscape"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
