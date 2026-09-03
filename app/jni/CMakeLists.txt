@@ -73,8 +73,12 @@ set(DIVIDEAD_SOURCES
     src/src/touch_input.c
     src/src/android_log.c
     src/src/android_asset_extract.c
+    src/src/android_video.c
+    src/src/movie.c
+#ifndef __ANDROID__
     src/src/roq/dreamroqlib.c
     src/src/roq/sdl-dreamroq.c
+#endif
     src/RES/FONT_TTF.c
     src/RES/FONT2_TTF.c
     src/RES/CLICK_WAV.c

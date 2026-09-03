@@ -1225,22 +1225,44 @@ int main(int argc, char* argv[])
 	MOVIE_START();
 #ifdef GAME_HOME_DIRECTORY
 	char cs_robo_path[512], opening_path[512];
-	snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "CS_ROGO"VIDEO_EXTENSION);
-	
+#ifdef __ANDROID__
+	/* On Android, try multiple video formats (.MPG, .AVI, .ROQ) */
+	snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "CS_ROGO.MPG");
 	result_movie = MOVIE_PLAY(cs_robo_path, 1);
-	if (!result_movie)
-	{
+	if (!result_movie) {
+		snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "CS_ROGO.AVI");
+		result_movie = MOVIE_PLAY(cs_robo_path, 1);
+	}
+	if (!result_movie) {
+		snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "CS_ROGO"VIDEO_EXTENSION);
+		result_movie = MOVIE_PLAY(cs_robo_path, 1);
+	}
+	
+	snprintf(opening_path, sizeof(opening_path), "%s/%s", game_directory, "OPEN.AVI");
+	result_movie = MOVIE_PLAY(opening_path, 1);
+	if (!result_movie) {
+		snprintf(opening_path, sizeof(opening_path), "%s/%s", game_directory, "OPEN.MPG");
+		result_movie = MOVIE_PLAY(opening_path, 1);
+	}
+	if (!result_movie) {
+		snprintf(opening_path, sizeof(opening_path), "%s/%s", game_directory, "OPEN"VIDEO_EXTENSION);
+		result_movie = MOVIE_PLAY(opening_path, 1);
+	}
+#else
+	snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "CS_ROGO"VIDEO_EXTENSION);
+	result_movie = MOVIE_PLAY(cs_robo_path, 1);
+	if (!result_movie) {
 		snprintf(cs_robo_path, sizeof(cs_robo_path), "%s/%s", game_directory, "cs_rogo"VIDEO_EXTENSION_LOWERCASE);
 		result_movie = MOVIE_PLAY(cs_robo_path, 1);
 	}
 	
 	snprintf(opening_path, sizeof(opening_path), "%s/%s", game_directory, "OPEN"VIDEO_EXTENSION);
 	result_movie = MOVIE_PLAY(opening_path, 1);
-	if (!result_movie)
-	{
+	if (!result_movie) {
 		snprintf(opening_path, sizeof(opening_path), "%s/%s", game_directory, "open"VIDEO_EXTENSION_LOWERCASE);
 		result_movie = MOVIE_PLAY(opening_path, 1);
 	}
+#endif
 #else
 	MOVIE_PLAY(FILE_PREFIX "CS_ROGO.MPG", 1);
 	MOVIE_PLAY(FILE_PREFIX "OPEN.MPG", 1);
