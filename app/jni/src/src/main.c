@@ -656,6 +656,11 @@ int rc = 0;
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
 	
+#ifdef __ANDROID__
+	GAME_SCREEN_UPDATE(screen);
+	return;
+#endif
+	
 	
 	//printf("GAME_BUFFER_REPAINT(%d)\n", effect);
 	

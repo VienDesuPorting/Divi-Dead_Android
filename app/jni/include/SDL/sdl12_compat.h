@@ -22,10 +22,6 @@
 
 /* ---- Global window/renderer/texture (set by SDL_SetVideoMode) ---- */
 extern SDL_Window *g_sdl_window;
-#ifdef __ANDROID__
-extern SDL_Renderer *g_sdl_renderer;
-extern SDL_Texture *g_sdl_texture;
-#endif
 
 /* ---- Removed functions ---- */
 
@@ -52,28 +48,7 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         w, h, window_flags);
     if (!g_sdl_window) return NULL;
-
-#ifdef __ANDROID__
-    /* On Android, use GPU renderer (no SDL_GetWindowSurface).
-     * Create a dummy surface to return as screen_video - the engine
-     * uses screen (640x480) for actual rendering, screen_video is
-     * only used for dimension queries. */
-    g_sdl_renderer = SDL_CreateRenderer(g_sdl_window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!g_sdl_renderer) {
-        g_sdl_renderer = SDL_CreateRenderer(g_sdl_window, -1, 0);
-    }
-    if (g_sdl_renderer) {
-        SDL_RenderSetLogicalSize(g_sdl_renderer, w, h);
-        g_sdl_texture = SDL_CreateTexture(g_sdl_renderer,
-            SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
-            w, h);
-    }
-    /* Return a 640x480 surface as screen_video (for dimension queries only) */
-    return SDL_CreateRGBSurface(0, w, h, 32, 0, 0, 0, 0);
-#else
     return SDL_GetWindowSurface(g_sdl_window);
-#endif
 }
 #define SDL_SetVideoMode(w, h, bpp, flags) SDL_SetVideoMode_compat((w), (h), (bpp), (flags))
 
