@@ -5,6 +5,7 @@
 //#define DEBUG_FLIST
 
 #include "system.h"
+#include <errno.h>
 
 char save_buffer[0x1800];
 int save_buffer_size;
@@ -76,7 +77,7 @@ int SYS_SAVE() {
 #endif
 	
 	if (!(f = SDL_RWFromFile(sys_path, "wb"))) {
-		printf("Can't write system\n");
+		printf("Can't write system (path: %s, errno: %d)\n", sys_path, errno);
 		return 0;
 	}	
 #endif
@@ -147,8 +148,10 @@ int SYS_LOAD() {
 
 	if (!(f = SDL_RWFromFile(sys_path, "rb"))) 
 	{
+		printf("Can't load system (path: %s)\n", sys_path);
 		if (!(f = SDL_RWFromFile(sys_path_underscore, "rb"))) 
 		{
+			printf("Can't load system (path: %s)\n", sys_path_underscore);
 			int n;
 			for (n = 0; n < 10; n++) strcpy(save_s.names[n], lang_texts[11]);
 			printf("Can't load system\n");

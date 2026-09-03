@@ -114,23 +114,7 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 			/* Don't activate this frame - let the highlight draw first */
 		}
 		
-		/* Activate menu item on the frame after selection */
-		if (touch_menu_activate) {
-			touch_menu_activate = 0;
-			joy_push_keys(+K_A);
-		}
-		
-		if ((keys & K_A)) {
-			menu_mode = ((keys & K_MODE) != 0);
-			if (!menu[zpos].callback) break;
-			//printf("GAME_MENU_SHOW_EX: Valid callbackA\n");
-			if ((retval = menu[zpos].callback(zpos)) != 0) {
-				//printf("GAME_MENU_SHOW_EX: Return != 0 break\n");
-				break;
-			}
-			//printf("GAME_MENU_SHOW_EX: End callback\n");
-			update = 1;
-		}
+		/* K_A is handled after the redraw block (below) */
 		
 		if (keys & K_UP) {
 			//printf("GAME_MENU_SHOW_EX:up\n");
