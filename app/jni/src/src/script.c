@@ -1,5 +1,11 @@
 #include "script.h"
 
+#ifdef __ANDROID__
+#define HOME_PATH game_directory
+#else
+#define HOME_PATH getenv("HOME")
+#endif
+
 //#define DEBUG_SCRIPT
 //#define DEBUG_SCRIPT_FLAGS
 
@@ -143,7 +149,7 @@ int GAME_SAVE(int n) {
 	printf("GAME_SAVE():0\n");
 	
 #ifdef HOME_DIRECTORY
-	snprintf(name, sizeof(name), "%s/%s/saves/DATA%d.DAT", getenv("HOME"), SAVE_DIRECTORY_NAME, n);
+	snprintf(name, sizeof(name), "%s/%s/saves/DATA%d.DAT", HOME_PATH, SAVE_DIRECTORY_NAME, n);
 #else
 	sprintf(name, SAVE_ROOT "/DATA/DATA%d.DAT", n);
 #endif
@@ -157,13 +163,13 @@ int GAME_SAVE(int n) {
 
 #ifdef HOME_DIRECTORY
 	char save_path[512];
-	snprintf(save_path, sizeof(save_path), "%s/%s", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(save_path, sizeof(save_path), "%s/%s", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 	
-	snprintf(save_path, sizeof(save_path), "%s/%s/snaps", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(save_path, sizeof(save_path), "%s/%s/snaps", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 	
-	snprintf(save_path, sizeof(save_path), "%s/%s/saves", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(save_path, sizeof(save_path), "%s/%s/saves", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 #else
 	mkdir(SAVE_ROOT "/DATA", 0777);
@@ -171,7 +177,7 @@ int GAME_SAVE(int n) {
 	
 	if (!(f = SDL_RWFromFile(name, "wb"))) {
 #ifdef HOME_DIRECTORY
-	snprintf(name, sizeof(name), "%s/%s/saves/data%d.dat", getenv("HOME"), SAVE_DIRECTORY_NAME, n);
+	snprintf(name, sizeof(name), "%s/%s/saves/data%d.dat", HOME_PATH, SAVE_DIRECTORY_NAME, n);
 	if (!(f = SDL_RWFromFile(name, "wb"))) {
 		printf("Can't save\n");
 		return 0;	
@@ -245,7 +251,7 @@ int GAME_LOAD(int n) {
 	printf("GAME_LOAD: %d\n", n);
 	
 #ifdef HOME_DIRECTORY
-	snprintf(name, sizeof(name), "%s/%s/saves/DATA%d.DAT", getenv("HOME"), SAVE_DIRECTORY_NAME, n);
+	snprintf(name, sizeof(name), "%s/%s/saves/DATA%d.DAT", HOME_PATH, SAVE_DIRECTORY_NAME, n);
 #else
 	sprintf(name, SAVE_ROOT "/DATA/DATA%d.DAT", n);
 #endif
@@ -260,7 +266,7 @@ int GAME_LOAD(int n) {
 	if (!(f = SDL_RWFromFile(name, "rb"))) 
 	{
 #ifdef HOME_DIRECTORY
-		snprintf(name, sizeof(name), "%s/%s/saves/data%d.dat", getenv("HOME"), SAVE_DIRECTORY_NAME, n);
+		snprintf(name, sizeof(name), "%s/%s/saves/data%d.dat", HOME_PATH, SAVE_DIRECTORY_NAME, n);
 		if (!(f = SDL_RWFromFile(name, "rb"))) 
 		{
 			printf("Can't load\n");
