@@ -54,9 +54,10 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
     if (!g_sdl_window) return NULL;
 
 #ifdef __ANDROID__
-    /* Create GPU-accelerated renderer + streaming texture.
-     * The game renders to a 640x480 surface, then we upload it
-     * to the texture and let the GPU scale it to fill the screen. */
+    /* On Android, use GPU renderer (no SDL_GetWindowSurface).
+     * Create a dummy surface to return as screen_video - the engine
+     * uses screen (640x480) for actual rendering, screen_video is
+     * only used for dimension queries. */
     g_sdl_renderer = SDL_CreateRenderer(g_sdl_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!g_sdl_renderer) {
@@ -68,8 +69,11 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
             SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
             w, h);
     }
-#endif
+    /* Return a 640x480 surface as screen_video (for dimension queries only) */
+    return SDL_CreateRGBSurface(0, w, h, 32, 0, 0, 0, 0);
+#else
     return SDL_GetWindowSurface(g_sdl_window);
+#endif
 }
 #define SDL_SetVideoMode(w, h, bpp, flags) SDL_SetVideoMode_compat((w), (h), (bpp), (flags))
 
