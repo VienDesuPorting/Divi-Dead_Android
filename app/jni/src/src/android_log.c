@@ -4,6 +4,7 @@
 #ifdef __ANDROID__
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <android/log.h>
 #include <pthread.h>
