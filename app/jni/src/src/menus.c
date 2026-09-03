@@ -203,6 +203,18 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 			GAME_BUFFER_REPAINT(0);
 			update = 0;
 		}
+		
+		/* Activate menu item AFTER redraw (so highlight is visible) */
+		if ((keys & K_A) || touch_menu_activate) {
+			touch_menu_activate = 0;
+			menu_mode = ((keys & K_MODE) != 0);
+			if (!menu[zpos].callback) break;
+			if ((retval = menu[zpos].callback(zpos)) != 0) {
+				break;
+			}
+			update = 1;
+		}
+		
 		PROGRAM_DELAY(6);
 	}
 	

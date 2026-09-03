@@ -349,8 +349,8 @@ void KEYS_UPDATE() {
 				}
 				if (item >= 0) {
 					/* Direct selection: set item index.
-					 * K_A will be fired on the next frame so the
-					 * highlight has time to draw first. */
+					 * touch_menu_activate will fire the callback
+					 * after the redraw shows the highlight. */
 					touch_menu_select = item;
 					touch_menu_activate = 1;
 				} else {
