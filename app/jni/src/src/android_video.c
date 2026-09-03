@@ -1,10 +1,8 @@
 /*
- * android_video.c - Video playback using Android MediaPlayer via JNI
+ * android_video.c - Video playback using Android MediaPlayer via JNI.
  *
- * Uses Android's native MediaPlayer to play video files (.MPG, .AVI, etc.)
- * The video is rendered to a SurfaceTexture which SDL2 can display.
- *
- * This replaces the ROQ decoder which only supports .ROQ format.
+ * Calls DiviDeadActivity.playVideo(path, skipAllowed) which creates a
+ * MediaPlayer + SurfaceView to play the video fullscreen.
  */
 
 #ifdef __ANDROID__
@@ -21,11 +19,20 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-/* Play a video file using Android MediaPlayer.
- * Returns 1 on success, 0 on failure.
- * The 'skip' parameter indicates if the user can skip the video (1=skip allowed).
- */
 int android_play_video(const char *path, int skip) {
+    LOGI("VIDEO: playing '%s' (skip=%d)", path, skip);
+    
+    if (!path || !*path) {
+        LOGE("VIDEO: null path");
+        return 0;
+    }
+    
+    /* Check if file exists */
+    if (access(path, F_OK) != 0) {
+        LOGI("VIDEO: file not found '%s'", path);
+        return 0;
+    }
+    
     JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
     if (!env) {
         LOGE("VIDEO: can't get JNIEnv");
@@ -38,59 +45,52 @@ int android_play_video(const char *path, int skip) {
         return 0;
     }
     
-    LOGI("VIDEO: playing '%s' (skip=%d)", path, skip);
+    jclass cls = (*env)->GetObjectClass(env, activity);
     
-    /* Check if file exists */
-    if (access(path, F_OK) != 0) {
-        LOGI("VIDEO: file not found '%s'", path);
-        (*env)->DeleteLocalRef(env, activity);
-        return 0;
-    }
-    
-    /* Convert path to Java string */
+    /* Create Java string for the path */
     jstring jpath = (*env)->NewStringUTF(env, path);
     if (!jpath) {
         LOGE("VIDEO: can't create path string");
+        (*env)->DeleteLocalRef(env, cls);
         (*env)->DeleteLocalRef(env, activity);
         return 0;
     }
     
-    /* Get SDLActivity class */
-    jclass cls = (*env)->GetObjectClass(env, activity);
-    
-    /* Call a method to play the video.
-     * We'll use SDLActivity's nativeRenderVideo or a custom method.
-     * Since SDL2 doesn't have built-in video, we'll use a simple approach:
-     * just call Android's MediaPlayer from Java side.
-     * 
-     * For now, just log and return success (video is skipped).
-     * Real implementation would need a Java-side method in SDLActivity
-     * that creates a MediaPlayer, sets the data source, and plays.
-     */
-    LOGI("VIDEO: skipping (MediaPlayer not implemented yet)");
-    
-    /* Simulate video duration for skip-able videos */
-    if (skip) {
-        /* Wait for a tap to skip, or timeout after 3 seconds */
-        Uint32 start = SDL_GetTicks();
-        while (SDL_GetTicks() - start < 3000) {
-            SDL_Event event;
-            while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_FINGERDOWN || event.type == SDL_KEYDOWN) {
-                    LOGI("VIDEO: skipped by user");
-                    goto done;
-                }
-            }
-            SDL_Delay(50);
-        }
+    /* Call playVideo(String path, int skipAllowed) */
+    jmethodID mid = (*env)->GetMethodID(env, cls, "playVideo", "(Ljava/lang/String;I)I");
+    if (!mid) {
+        LOGE("VIDEO: can't find playVideo method");
+        (*env)->DeleteLocalRef(env, jpath);
+        (*env)->DeleteLocalRef(env, cls);
+        (*env)->DeleteLocalRef(env, activity);
+        return 0;
     }
     
-done:
+    /* We need to call this on the UI thread, but playVideo blocks until done.
+     * Use a global ref to avoid issues with local refs. */
+    jobject globalActivity = (*env)->NewGlobalRef(env, activity);
+    
+    /* Detach current thread from JVM (we might be on the SDL thread) */
+    /* Actually, SDL_AndroidGetJNIEnv already handles thread attachment. */
+    
+    /* Call playVideo - this blocks until the video finishes */
+    jint result = (*env)->CallIntMethod(env, globalActivity, mid, jpath, skip);
+    
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+        LOGE("VIDEO: Java exception");
+        result = 0;
+    }
+    
+    LOGI("VIDEO: result = %d (1=played, 2=skipped, 0=failed)", result);
+    
+    (*env)->DeleteGlobalRef(env, globalActivity);
     (*env)->DeleteLocalRef(env, jpath);
     (*env)->DeleteLocalRef(env, cls);
     (*env)->DeleteLocalRef(env, activity);
     
-    return 1;
+    return (result > 0) ? 1 : 0;
 }
 
 #endif /* __ANDROID__ */
