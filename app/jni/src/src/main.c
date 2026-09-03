@@ -1222,6 +1222,11 @@ int main(int argc, char* argv[])
 
 #ifndef NOMOVIE
 	printf("MOVIE_START();\n");
+#ifdef __ANDROID__
+	/* Clear screen to black so splash doesn't show after video */
+	SDL_FillRect(screen, NULL, 0);
+	GAME_SCREEN_UPDATE(screen);
+#endif
 	MOVIE_START();
 #ifdef GAME_HOME_DIRECTORY
 	char cs_robo_path[512], opening_path[512];
