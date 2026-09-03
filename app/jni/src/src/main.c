@@ -568,6 +568,8 @@ void GAME_UPDATE_DEBUG_INFO() {
 void GAME_SCREEN_UPDATE(SDL_Surface *from) {
 #ifdef __ANDROID__
 	/* Scale 640x480 to fill screen while preserving 4:3 aspect ratio */
+	{
+	Uint32 _st = SDL_GetTicks();
 	if (from->w != screen_video->w || from->h != screen_video->h) {
 		/* Calculate scale to fit within screen_video bounds */
 		double scale_x = (double)screen_video->w / from->w;
@@ -590,7 +592,11 @@ void GAME_SCREEN_UPDATE(SDL_Surface *from) {
 #else
 	SDL_BlitSurface(from, NULL, screen_video, NULL);
 	SDL_Flip(screen_video);
-#endif
+	#endif
+	if (SDL_GetTicks() - _st > 10) {
+		printf("SCREEN_UPDATE: %d ms\n", SDL_GetTicks() - _st);
+	}
+	}
 	GAME_UPDATE_DEBUG_INFO();
 }
 
@@ -656,6 +662,15 @@ int rc = 0;
 
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
+	
+#ifdef __ANDROID__
+	/* On Android, transition effects cause performance issues because
+	 * each step does a full-screen scaled blit. Skip the animation
+	 * and just do a single screen update. */
+	(void)n; (void)m; (void)y; (void)steps;
+	GAME_SCREEN_UPDATE(screen);
+	return;
+#endif
 	
 	//printf("GAME_BUFFER_REPAINT(%d)\n", effect);
 	
