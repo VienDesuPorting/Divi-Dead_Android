@@ -54,16 +54,22 @@ int SYS_SAVE() {
 
 #ifdef HOME_DIRECTORY
 	char save_path[512];
-	snprintf(save_path, sizeof(save_path), "%s/%s", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	#ifdef __ANDROID__
+	/* On Android, use game_directory (internal storage) instead of getenv("HOME") */
+	#define HOME_PATH game_directory
+	#else
+	#define HOME_PATH getenv("HOME")
+	#endif
+	snprintf(save_path, sizeof(save_path), "%s/%s", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 	
-	snprintf(save_path, sizeof(save_path), "%s/%s/snaps", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(save_path, sizeof(save_path), "%s/%s/snaps", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 	
-	snprintf(save_path, sizeof(save_path), "%s/%s/saves", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(save_path, sizeof(save_path), "%s/%s/saves", HOME_PATH, SAVE_DIRECTORY_NAME);
 	mkdir(save_path, 0755);
 	
-	snprintf(sys_path, sizeof(sys_path), "%s/%s/SYS.DAT", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	snprintf(sys_path, sizeof(sys_path), "%s/%s/SYS.DAT", HOME_PATH, SAVE_DIRECTORY_NAME);
 #else
 	mkdir(SAVE_ROOT "/DATA", 0755);
 	snprintf(sys_path, sizeof(sys_path), SAVE_ROOT "/DATA/SYS.DAT");
@@ -127,8 +133,13 @@ int SYS_LOAD() {
 #else
 
 #ifdef HOME_DIRECTORY
-	snprintf(sys_path, sizeof(sys_path), "%s/%s/SYS.DAT", getenv("HOME"), SAVE_DIRECTORY_NAME);
-	snprintf(sys_path_underscore, sizeof(sys_path_underscore), "%s/%s/sys.dat", getenv("HOME"), SAVE_DIRECTORY_NAME);
+	#ifdef __ANDROID__
+	#define HOME_PATH2 game_directory
+	#else
+	#define HOME_PATH2 getenv("HOME")
+	#endif
+	snprintf(sys_path, sizeof(sys_path), "%s/%s/SYS.DAT", HOME_PATH2, SAVE_DIRECTORY_NAME);
+	snprintf(sys_path_underscore, sizeof(sys_path_underscore), "%s/%s/sys.dat", HOME_PATH2, SAVE_DIRECTORY_NAME);
 #else
 	snprintf(sys_path, sizeof(sys_path), SAVE_ROOT "/DATA/SYS.DAT");
 	snprintf(sys_path_underscore, sizeof(sys_path_underscore), SAVE_ROOT "/data/sys.dat");

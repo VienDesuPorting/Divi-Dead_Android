@@ -111,6 +111,13 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 			zpos = touch_menu_select;
 			touch_menu_select = -1;
 			update = 1;
+			/* Don't activate this frame - let the highlight draw first */
+		}
+		
+		/* Activate menu item on the frame after selection */
+		if (touch_menu_activate) {
+			touch_menu_activate = 0;
+			joy_push_keys(+K_A);
 		}
 		
 		if ((keys & K_A)) {

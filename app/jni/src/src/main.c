@@ -88,6 +88,7 @@ static int flist_already_loaded = 0;  /* Skip re-loading FLIST */
 
 /* Touch menu selection: when set to >= 0, the menu should jump to this item */
 int touch_menu_select = -1;
+int touch_menu_activate = 0;  /* Set to 1 to fire K_A on next frame */
 SDL_PixelFormat screen_format;
 
 int done = 0, game_end = 0, swap_buttons = 0;
@@ -347,9 +348,11 @@ void KEYS_UPDATE() {
 						screen_video->w, screen_video->h, item);
 				}
 				if (item >= 0) {
-					/* Direct selection: set item AND activate */
+					/* Direct selection: set item index.
+					 * K_A will be fired on the next frame so the
+					 * highlight has time to draw first. */
 					touch_menu_select = item;
-					joy_push_keys(+K_A);
+					touch_menu_activate = 1;
 				} else {
 					joy_push_keys(+K_A);
 				}

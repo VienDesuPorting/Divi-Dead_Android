@@ -232,3 +232,4 @@ extern char game_directory[512];
 
 #endif
 extern int touch_menu_select;
+extern int touch_menu_activate;

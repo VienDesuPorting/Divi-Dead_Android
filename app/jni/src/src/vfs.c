@@ -130,36 +130,36 @@ FSLI *VFS_FIND(char *name) {
 	return NULL;
 }
 
-/* Cache PAK file handles to avoid repeated open/close on Android */
+/* Cache PAK file handles using FILE* directly (bypasses SDL2 Android overhead) */
 #define VFS_MAX_PAKS 8
-static SDL_RWops *vfs_cached_rwops[VFS_MAX_PAKS] = {0};
+static FILE *vfs_cached_files[VFS_MAX_PAKS] = {0};
 static char vfs_cached_paths[VFS_MAX_PAKS][512] = {0};
 static int vfs_pak_count = 0;
 
-static SDL_RWops *VFS_GET_PAK_HANDLE(const char *path) {
+static FILE *VFS_GET_PAK_HANDLE(const char *path) {
 	int n;
 	/* Check if we already have this PAK open */
 	for (n = 0; n < vfs_pak_count; n++) {
-		if (stricmp(vfs_cached_paths[n], path) == 0 && vfs_cached_rwops[n]) {
-			return vfs_cached_rwops[n];
+		if (stricmp(vfs_cached_paths[n], path) == 0 && vfs_cached_files[n]) {
+			return vfs_cached_files[n];
 		}
 	}
 	/* Not found - open it */
 	if (vfs_pak_count >= VFS_MAX_PAKS) {
 		/* Cache full - close oldest */
-		if (vfs_cached_rwops[0]) {
-			SDL_RWclose(vfs_cached_rwops[0]);
+		if (vfs_cached_files[0]) {
+			fclose(vfs_cached_files[0]);
 		}
-		memmove(&vfs_cached_rwops[0], &vfs_cached_rwops[1], 
-			(VFS_MAX_PAKS - 1) * sizeof(SDL_RWops*));
+		memmove(&vfs_cached_files[0], &vfs_cached_files[1], 
+			(VFS_MAX_PAKS - 1) * sizeof(FILE*));
 		memmove(&vfs_cached_paths[0], &vfs_cached_paths[1],
 			(VFS_MAX_PAKS - 1) * 512);
 		vfs_pak_count--;
 	}
-	SDL_RWops *f = SDL_RWFromFile(path, "rb");
+	FILE *f = fopen(path, "rb");
 	if (f) {
 		strncpy(vfs_cached_paths[vfs_pak_count], path, 511);
-		vfs_cached_rwops[vfs_pak_count] = f;
+		vfs_cached_files[vfs_pak_count] = f;
 		vfs_pak_count++;
 	}
 	return f;
@@ -167,10 +167,10 @@ static SDL_RWops *VFS_GET_PAK_HANDLE(const char *path) {
 
 int VFS_READ(FSLI *slice, uint8_t *buffer) {
 	if (!slice) return -1;
-	SDL_RWops *f = VFS_GET_PAK_HANDLE(slice->pak->path);
+	FILE *f = VFS_GET_PAK_HANDLE(slice->pak->path);
 	if (f != NULL) {
-		SDL_RWseek(f, slice->pos, SEEK_SET);
-		SDL_RWread(f, buffer, slice->len, 1);
+		fseek(f, slice->pos, SEEK_SET);
+		fread(buffer, 1, slice->len, f);
 		return slice->len;
 	} else {
 		PROGRAM_EXIT_ERROR("Can't open pak '%s'", slice->pak->path);
