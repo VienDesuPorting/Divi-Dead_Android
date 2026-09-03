@@ -601,35 +601,18 @@ void GAME_SCREEN_UPDATE(SDL_Surface *from) {
 }
 
 void GAME_SCREEN_UPDATE_RECT(SDL_Surface *from, SDL_Rect *rect) {
-#ifdef __ANDROID__
-	/* On Android, always do a full scaled screen update */
 	(void)rect;
 	GAME_SCREEN_UPDATE(from);
-#else
-	if (rect == NULL) {
-		GAME_SCREEN_UPDATE(from);
-		return;
-	}
-	SDL_BlitSurface(from, rect, screen_video, rect);
-	
-	#ifndef FBUFFER_FULL_UPDATE
-		SDL_UpdateRect(screen_video, rect->x, rect->y, rect->w, rect->h);
-	#else
-		SDL_Flip(screen_video);
-	#endif
-#endif
 }
 
 //#define UPDATE_RECTS_OPTIMIZED
 //#define UPDATE_METHOD_1
 
 void GAME_SCREEN_UPDATE_RECTS(SDL_Surface *from, int numrects, SDL_Rect *rects) {
-#ifdef __ANDROID__
-	/* On Android, always do a full scaled screen update */
 	(void)numrects;
 	(void)rects;
 	GAME_SCREEN_UPDATE(from);
-#else
+#ifndef __ANDROID__
 	int n;
 	#ifdef UPDATE_METHOD_1
 		SDL_BlitSurface(from, NULL, screen_video, NULL);
@@ -651,9 +634,15 @@ SDL_Rect rs[3072 * 2 * 4];
 int rc = 0;
 
 #ifdef UPDATE_RECTS_OPTIMIZED
+#ifdef __ANDROID__
+#define _UPDATE_RECT_START()
+#define _UPDATE_RECT(r) GAME_SCREEN_UPDATE(screen);
+#define _UPDATE_RECT_END()
+#else
 #define _UPDATE_RECT_START()
 #define _UPDATE_RECT(r) rs[rc++] = r;
 #define _UPDATE_RECT_END() GAME_SCREEN_UPDATE_RECTS(screen, rc, rs);
+#endif
 #else
 #define _UPDATE_RECT_START()
 #define _UPDATE_RECT(r) GAME_SCREEN_UPDATE_RECT(screen, &r);
@@ -663,14 +652,6 @@ int rc = 0;
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
 	
-#ifdef __ANDROID__
-	/* On Android, transition effects cause performance issues because
-	 * each step does a full-screen scaled blit. Skip the animation
-	 * and just do a single screen update. */
-	(void)n; (void)m; (void)y; (void)steps;
-	GAME_SCREEN_UPDATE(screen);
-	return;
-#endif
 	
 	//printf("GAME_BUFFER_REPAINT(%d)\n", effect);
 	
@@ -848,14 +829,11 @@ void sdl_init() {
 		SDL_BlitSurface(s, NULL, screen, &r);
 		SDL_FreeSurface(s);
 #ifdef __ANDROID__
-		{
-			SDL_Rect dst = {0, 0, screen_video->w, screen_video->h};
-			SDL_BlitScaled(screen, NULL, screen_video, &dst);
-		}
+		GAME_SCREEN_UPDATE(screen);
 #else
 		SDL_BlitSurface(screen, NULL, screen_video, NULL);
-#endif
 		SDL_Flip(screen_video);
+#endif
 		
 		/* Extract assets to internal storage while splash is visible */
 		#ifdef __ANDROID__

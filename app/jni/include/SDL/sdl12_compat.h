@@ -20,8 +20,12 @@
 #define SDL_SRCALPHA    0
 #define SDL_SRCCOLORKEY 0
 
-/* ---- Global window pointer (set by SDL_SetVideoMode) ---- */
+/* ---- Global window/renderer/texture (set by SDL_SetVideoMode) ---- */
 extern SDL_Window *g_sdl_window;
+#ifdef __ANDROID__
+extern SDL_Renderer *g_sdl_renderer;
+extern SDL_Texture *g_sdl_texture;
+#endif
 
 /* ---- Removed functions ---- */
 
@@ -29,25 +33,16 @@ extern SDL_Window *g_sdl_window;
 #define SDL_EnableKeyRepeat(delay, interval) ((void)0)
 #define SDL_SetAlpha(surface, flags, alpha) ((void)0)
 
-/* SDL_Flip -> update the window surface */
-#define SDL_Flip(surface) \
-    ((g_sdl_window) ? SDL_UpdateWindowSurface(g_sdl_window) : 0)
+#define SDL_Flip(surface) SDL_UpdateWindowSurface(g_sdl_window)
+#define SDL_UpdateRect(surface, x, y, w, h) SDL_UpdateWindowSurface(g_sdl_window)
+#define SDL_UpdateRects(surface, numrects, rects) SDL_UpdateWindowSurfaceRects(g_sdl_window, (rects), (numrects))
 
-/* SDL_UpdateRect -> update the window surface */
-#define SDL_UpdateRect(surface, x, y, w, h) \
-    ((g_sdl_window) ? SDL_UpdateWindowSurface(g_sdl_window) : 0)
-
-/* SDL_UpdateRects -> update the window surface rects */
-#define SDL_UpdateRects(surface, numrects, rects) \
-    ((g_sdl_window) ? SDL_UpdateWindowSurfaceRects(g_sdl_window, (rects), (numrects)) : 0)
-
-/* SDL_DisplayFormat / SDL_DisplayFormatAlpha */
 #define SDL_DisplayFormat(surface) \
     SDL_ConvertSurfaceFormat((surface), SDL_PIXELFORMAT_RGB888, 0)
 #define SDL_DisplayFormatAlpha(surface) \
     SDL_ConvertSurfaceFormat((surface), SDL_PIXELFORMAT_ARGB8888, 0)
 
-/* SDL_SetVideoMode -> create window + get surface */
+/* SDL_SetVideoMode -> create window + (renderer on Android) */
 extern SDL_Surface *screen_video;
 static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32 flags) {
     (void)bpp;
@@ -57,16 +52,29 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         w, h, window_flags);
     if (!g_sdl_window) return NULL;
+
+#ifdef __ANDROID__
+    /* Create GPU-accelerated renderer + streaming texture.
+     * The game renders to a 640x480 surface, then we upload it
+     * to the texture and let the GPU scale it to fill the screen. */
+    g_sdl_renderer = SDL_CreateRenderer(g_sdl_window, -1,
+        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!g_sdl_renderer) {
+        g_sdl_renderer = SDL_CreateRenderer(g_sdl_window, -1, 0);
+    }
+    if (g_sdl_renderer) {
+        SDL_RenderSetLogicalSize(g_sdl_renderer, w, h);
+        g_sdl_texture = SDL_CreateTexture(g_sdl_renderer,
+            SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+            w, h);
+    }
+#endif
     return SDL_GetWindowSurface(g_sdl_window);
 }
 #define SDL_SetVideoMode(w, h, bpp, flags) SDL_SetVideoMode_compat((w), (h), (bpp), (flags))
 
-
 /* ---- Android asset path fix ---- */
 #ifdef __ANDROID__
-/* On Android, SDL2 reads files from assets/ when given a relative path.
- * But the engine prepends "./" (from dirname()), which makes SDL2 try
- * the filesystem instead. Strip "./" prefix so assets work. */
 static inline SDL_RWops *SDL_RWFromFile_android_fix(const char *file, const char *mode) {
     if (file == NULL) return NULL;
     while (file[0] == '.' && file[1] == '/') file += 2;
