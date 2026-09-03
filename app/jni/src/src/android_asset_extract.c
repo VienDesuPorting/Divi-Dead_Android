@@ -229,10 +229,9 @@ int android_assets_extracted(void) {
  * Called during splash screen display.
  * Returns 0 on success. */
 int android_extract_assets(void) {
-    if (android_assets_extracted()) {
-        LOGI("Assets already extracted, skipping");
-        return 0;
-    }
+    /* Don't skip even if .extracted exists - check each file individually.
+     * This ensures new files (like OPEN.AVI) are extracted even after
+     * the first extraction was done. */
     return extract_all_assets();
 }
 
