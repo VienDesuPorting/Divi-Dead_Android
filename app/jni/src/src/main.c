@@ -759,7 +759,7 @@ void prepare_interface_image(SDL_Rect *rect, SDL_Surface **dest) {
 	SDL_PixelFormat *pf = interface->format;
 	SDL_Surface *temp = SDL_CreateRGBSurface(interface->flags, rect->w, rect->h, pf->BitsPerPixel, pf->Rmask, pf->Gmask, pf->Bmask, pf->Amask);
 	SDL_BlitSurface(interface, rect, temp, NULL);
-	SDL_SetColorKey(temp, 0, SDL_MapRGB(temp->format, 0x00, 0xFF, 0x00));
+	SDL_SetColorKey(temp, SDL_TRUE, SDL_MapRGB(temp->format, 0x00, 0xFF, 0x00));
 	*dest = SDL_ZoomSurface(temp, ASPECT_X, ASPECT_Y);
 	SDL_FreeSurface(temp);
 }
@@ -1098,7 +1098,7 @@ void game_init() {
 	
 	interface = GAME_IMAGE_GET_EX3("WAKU_P", NULL, 0, 0);
 
-	SDL_SetColorKey(interface, 0, 0);
+	SDL_SetColorKey(interface, SDL_FALSE, 0);
 	
 	for (n = 0; n < 4; n++) prepare_interface_image(&interface_main_buttons_clip[n], interface_main_buttons_images + n);
 	for (n = 0; n < 3; n++) prepare_interface_image(&interface_title_clip[n], interface_title_images + n);

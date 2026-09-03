@@ -480,9 +480,9 @@ SDL_Surface *GAME_IMAGE_GET_EX3(char *_name1, char *_name2, int usecache, int sc
 			
 			if (surface_o->format->BitsPerPixel != 8) {
 				if (toupper(name1[0]) == 'I' && name1[1] == '_' && name1[2] == '1' && name1[3] == '7') {
-					SDL_SetColorKey(surface_o, 0, SDL_MapRGB(surface_o->format, 0x53, 0xFF, 0x00));
+					SDL_SetColorKey(surface_o, SDL_TRUE, SDL_MapRGB(surface_o->format, 0x53, 0xFF, 0x00));
 				} else {
-					SDL_SetColorKey(surface_o, 0, SDL_MapRGB(surface_o->format, 0x00, 0xFF, 0x00));
+					SDL_SetColorKey(surface_o, SDL_TRUE, SDL_MapRGB(surface_o->format, 0x00, 0xFF, 0x00));
 				}
 			}
 			
@@ -595,7 +595,7 @@ SDL_Surface *GAME_IMAGE_GET(char *name) {
 void GAME_BACKGROUND(char *name, SDL_Rect clip, int colorKey) {
 	SDL_Surface *surface;
 	if ((surface = GAME_IMAGE_GET(name)) != NULL) {
-		if (colorKey) SDL_SetColorKey(surface, 0, SDL_MapRGB(surface->format, 0x00, 0xFF, 0x00));
+		if (colorKey) SDL_SetColorKey(surface, SDL_TRUE, SDL_MapRGB(surface->format, 0x00, 0xFF, 0x00));
 		SDL_BlitSurface(surface, NULL, screen, &clip);
 		//SDL_FreeSurface(surface);
 	}
@@ -658,7 +658,7 @@ void GAME_CHARA_EX(char *_name, SDL_Rect clip)
 #ifdef CONVERT_16BPP
 	SDL_Surface* real;
 	real = SDL_DisplayFormat(surface);
-	SDL_SetColorKey(real, (0 | SDL_RLEACCEL), SDL_MapRGB(real->format, 0, 0, 0));
+	SDL_SetColorKey(real, SDL_TRUE, SDL_MapRGB(real->format, 0, 0, 0));
 	SDL_BlitSurface(real, NULL, screen, &clip);
 	SDL_FreeSurface(real);
 #else

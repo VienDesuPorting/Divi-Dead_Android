@@ -17,8 +17,8 @@
 #define SDL_OPENGLBLIT  0
 #define SDL_RESIZABLE   SDL_WINDOW_RESIZABLE
 #define SDL_NOFRAME     SDL_WINDOW_BORDERLESS
-#define SDL_SRCALPHA    0
-#define SDL_SRCCOLORKEY 0
+#define SDL_SRCALPHA    SDL_TRUE
+#define SDL_SRCCOLORKEY SDL_TRUE
 
 /* ---- Global window/renderer/texture (set by SDL_SetVideoMode) ---- */
 extern SDL_Window *g_sdl_window;
