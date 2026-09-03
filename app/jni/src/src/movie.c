@@ -23,14 +23,8 @@ uint_fast8_t MOVIE_PLAY(char *name, int skip) {
     return android_play_video(name, skip);
 }
 #else
-/* Non-Android: use the ROQ decoder from sdl-dreamroq.c */
-/* MOVIE_PLAY is defined in roq/sdl-dreamroq.c */
+/* Non-Android: MOVIE_PLAY is defined in roq/sdl-dreamroq.c */
 #endif
 
-void MOVIE_START(void) {
-    printf("MOVIE_START();\n");
-}
-
-void MOVIE_END(void) {
-    printf("MOVIE_END();\n");
-}
+/* MOVIE_START() and MOVIE_END() are #define macros in main.h (no-ops).
+ * No function definitions needed - they expand to nothing. */
