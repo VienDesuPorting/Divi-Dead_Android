@@ -94,16 +94,14 @@ public class DiviDeadActivity extends SDLActivity {
             @Override
             public void run() {
                 try {
-                    // Create a SurfaceView for video
+                    // Create a SurfaceView for video (centered, will resize to native)
                     videoSurface = new SurfaceView(DiviDeadActivity.this);
-                    videoSurface.setLayoutParams(new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams videoParams = new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT));
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        android.view.Gravity.CENTER);
                     
-                    // Add to the root view, on top of SDL surface
-                    addContentView(videoSurface, new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT));
+                    addContentView(videoSurface, videoParams);
                     
                     videoSurface.getHolder().addCallback(new SurfaceHolder.Callback() {
                         @Override
@@ -113,6 +111,21 @@ public class DiviDeadActivity extends SDLActivity {
                                 videoPlayer.setDataSource(path);
                                 videoPlayer.setDisplay(holder);
                                 videoPlayer.setLooping(false);
+                                
+                                // Resize SurfaceView to native video dimensions (not stretched)
+                                videoPlayer.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
+                                    @Override
+                                    public void onVideoSizeChanged(MediaPlayer mp, int vw, int vh) {
+                                        if (vw > 0 && vh > 0) {
+                                            int sw = getResources().getDisplayMetrics().widthPixels;
+                                            int sh = getResources().getDisplayMetrics().heightPixels;
+                                            double scale = Math.min((double)sw/vw, (double)sh/vh);
+                                            int dw = (int)(vw * scale);
+                                            int dh = (int)(vh * scale);
+                                            videoSurface.setLayoutParams(new FrameLayout.LayoutParams(dw, dh, android.view.Gravity.CENTER));
+                                        }
+                                    }
+                                });
                                 videoPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                                     @Override
                                     public void onCompletion(MediaPlayer mp) {
