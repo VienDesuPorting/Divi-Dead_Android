@@ -87,10 +87,6 @@ SDL_Renderer *g_sdl_renderer = NULL;
 SDL_Texture *g_sdl_texture = NULL;
 static int gpu_renderer_init = 0;
 #endif
-#ifdef __ANDROID__
-SDL_Renderer *g_sdl_renderer = NULL;
-SDL_Texture *g_sdl_texture = NULL;
-#endif
 static int vfs_already_initialized = 0;  /* Skip re-init on Android preload */
 static int interface_already_loaded = 0;  /* Skip re-loading WAKU_P */
 static int flist_already_loaded = 0;  /* Skip re-loading FLIST */
