@@ -1,13 +1,29 @@
 /*
- * touch_input.c - Touch gesture handling for Android/mobile platforms
+ * touch_input.c - Touch gesture handling v2 for Android
  *
- * Gestures:
- *   - Tap on menu item    -> Select that item (K_A)
- *   - Tap elsewhere        -> Advance text (K_A)
- *   - Swipe up             -> Open main menu (K_L)
- *   - Swipe down           -> Open gallery (K_R)
- *   - Swipe left/right     -> Navigate (K_LEFT/K_RIGHT)
- *   - Long press (500ms)   -> Cancel (K_B)
+ * Redesigned gesture system for visual novel gameplay:
+ *
+ * READING (in-game text):
+ *   Tap anywhere         → Advance text (K_A)
+ *   Swipe right          → Open in-game menu (K_L)
+ *   Swipe left           → Back/cancel (K_B)
+ *   Swipe up             → Navigate up (K_UP)
+ *   Swipe down           → Navigate down (K_DOWN)
+ *   Long press (600ms)   → Gallery/extra menu (K_R)
+ *
+ * MENU (title/options/language):
+ *   Tap on menu item     → Select that item directly
+ *   Tap elsewhere        → Select highlighted item (K_A)
+ *   Swipe up/down        → Navigate items (K_UP/K_DOWN)
+ *   Swipe left           → Cancel/back (K_B)
+ *   Swipe right          → Confirm (K_A)
+ *   Long press           → Gallery (K_R)
+ *
+ * CHOICES (in-game multiple choice):
+ *   Tap on choice        → Select that choice
+ *   Swipe up/down        → Navigate choices
+ *   Swipe right          → Confirm (K_A)
+ *   Swipe left           → Cancel (K_B)
  */
 
 #include "SDL/SDL.h"
@@ -24,11 +40,12 @@ typedef struct {
 
 static TouchState touch_state = {0};
 
-#define SWIPE_DISTANCE  0.15f
-#define SWIPE_MAX_TIME  500
-#define TAP_MAX_TIME    300
-#define LONG_PRESS_TIME 500
-#define TAP_DISTANCE    0.05f
+/* Tunable thresholds */
+#define SWIPE_DISTANCE   0.12f   /* 12% of screen = swipe */
+#define SWIPE_MAX_TIME   400     /* must complete within 400ms */
+#define TAP_MAX_TIME    250      /* quick tap = < 250ms */
+#define LONG_PRESS_TIME 600      /* hold 600ms = long press */
+#define TAP_DISTANCE    0.04f   /* max movement for tap = 4% */
 
 uint32_t TOUCH_HANDLE_EVENT(SDL_Event *event) {
     uint32_t result = 0;
@@ -56,7 +73,7 @@ uint32_t TOUCH_HANDLE_EVENT(SDL_Event *event) {
                     float dx = touch_state.last_x - touch_state.start_x;
                     float dy = touch_state.last_y - touch_state.start_y;
                     if ((dx*dx + dy*dy) < (TAP_DISTANCE * TAP_DISTANCE)) {
-                        result |= K_B;
+                        result |= K_R;  /* long press = gallery */
                         touch_state.long_press_fired = 1;
                     }
                 }
@@ -75,17 +92,32 @@ uint32_t TOUCH_HANDLE_EVENT(SDL_Event *event) {
                 if (touch_state.long_press_fired) break;
 
                 if (abs_dx < TAP_DISTANCE && abs_dy < TAP_DISTANCE) {
+                    /* TAP */
                     if (duration < TAP_MAX_TIME) {
-                        /* Tap - always send K_A (select/advance text) */
+                        result |= K_A;
+                    } else if (duration < LONG_PRESS_TIME) {
+                        /* Slow tap - also K_A (more forgiving) */
                         result |= K_A;
                     }
                 } else if (duration < SWIPE_MAX_TIME) {
+                    /* SWIPE - determine direction */
                     if (abs_dx > abs_dy) {
-                        result |= (dx > 0) ? K_RIGHT : K_LEFT;
+                        /* Horizontal swipe */
+                        if (dx > 0) {
+                            result |= K_L;  /* swipe right = open menu */
+                        } else {
+                            result |= K_B;  /* swipe left = cancel/back */
+                        }
                     } else {
-                        result |= (dy < 0) ? K_L : K_R;
+                        /* Vertical swipe */
+                        if (dy < 0) {
+                            result |= K_UP;  /* swipe up = navigate up */
+                        } else {
+                            result |= K_DOWN; /* swipe down = navigate down */
+                        }
                     }
                 }
+                /* Long slow drag (>400ms, >tap distance) = ignore */
             }
             break;
     }
@@ -100,19 +132,19 @@ uint32_t TOUCH_CHECK_LONG_PRESS(void) {
             float dy = touch_state.last_y - touch_state.start_y;
             if ((dx*dx + dy*dy) < (TAP_DISTANCE * TAP_DISTANCE)) {
                 touch_state.long_press_fired = 1;
-                return K_B;
+                return K_R;
             }
         }
     }
     return 0;
 }
 
-/* Menu geometry for tap-to-select */
+/* ---- Menu geometry for tap-to-select ---- */
 typedef struct {
-    int active;       /* Is a menu currently shown? */
-    int x, y;         /* Top-left of menu area */
-    int item_h;       /* Height of each menu item */
-    int count;        /* Number of items */
+    int active;
+    int x, y;
+    int item_h;
+    int count;
 } MenuGeometry;
 
 static MenuGeometry menu_geom = {0};
@@ -129,18 +161,12 @@ void TOUCH_CLEAR_MENU_GEOMETRY(void) {
     menu_geom.active = 0;
 }
 
-/* Get the menu item index at the given touch coordinates (0.0-1.0).
- * Returns -1 if not tapping on a menu item.
- * screen_w/h are the actual window dimensions for coordinate conversion.
- */
 int TOUCH_GET_MENU_ITEM(float touch_x, float touch_y, int screen_w, int screen_h) {
     if (!menu_geom.active || menu_geom.count <= 0) return -1;
-    
-    /* Convert normalized touch coords to screen pixels */
+
     int screen_x = (int)(touch_x * screen_w);
     int screen_y = (int)(touch_y * screen_h);
-    
-    /* Calculate the game's render area on screen (letterboxed 4:3) */
+
     double scale_x = (double)screen_w / 640.0;
     double scale_y = (double)screen_h / 480.0;
     double scale = scale_x < scale_y ? scale_x : scale_y;
@@ -148,20 +174,17 @@ int TOUCH_GET_MENU_ITEM(float touch_x, float touch_y, int screen_w, int screen_h
     int game_h = (int)(480 * scale);
     int offset_x = (screen_w - game_w) / 2;
     int offset_y = (screen_h - game_h) / 2;
-    
-    /* Check if tap is within the game render area (not on black bars) */
+
     if (screen_x < offset_x || screen_x >= offset_x + game_w) return -1;
     if (screen_y < offset_y || screen_y >= offset_y + game_h) return -1;
-    
-    /* Convert screen pixels to 640x480 game coordinates */
+
     int game_x = (int)((screen_x - offset_x) * 640.0 / game_w);
     int game_y = (int)((screen_y - offset_y) * 480.0 / game_h);
-    
-    /* Find which menu item was tapped */
+
     if (game_y < menu_geom.y) return -1;
-    
+
     int item = (game_y - menu_geom.y) / menu_geom.item_h;
     if (item < 0 || item >= menu_geom.count) return -1;
-    
+
     return item;
 }

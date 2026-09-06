@@ -85,6 +85,11 @@ SDL_Window *g_sdl_window = NULL;
 #ifdef __ANDROID__
 SDL_Renderer *g_sdl_renderer = NULL;
 SDL_Texture *g_sdl_texture = NULL;
+static int gpu_renderer_init = 0;
+#endif
+#ifdef __ANDROID__
+SDL_Renderer *g_sdl_renderer = NULL;
+SDL_Texture *g_sdl_texture = NULL;
 #endif
 static int vfs_already_initialized = 0;  /* Skip re-init on Android preload */
 static int interface_already_loaded = 0;  /* Skip re-loading WAKU_P */
@@ -656,10 +661,7 @@ int rc = 0;
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
 	
-#ifdef __ANDROID__
-	GAME_SCREEN_UPDATE(screen);
-	return;
-#endif
+	
 	
 	
 	//printf("GAME_BUFFER_REPAINT(%d)\n", effect);
@@ -837,12 +839,7 @@ void sdl_init() {
 		r.h = s->h;
 		SDL_BlitSurface(s, NULL, screen, &r);
 		SDL_FreeSurface(s);
-#ifdef __ANDROID__
 		GAME_SCREEN_UPDATE(screen);
-#else
-		SDL_BlitSurface(screen, NULL, screen_video, NULL);
-		SDL_Flip(screen_video);
-#endif
 		
 		/* Extract assets to internal storage while splash is visible */
 		#ifdef __ANDROID__

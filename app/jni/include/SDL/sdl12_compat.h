@@ -29,9 +29,11 @@ extern SDL_Window *g_sdl_window;
 #define SDL_EnableKeyRepeat(delay, interval) ((void)0)
 #define SDL_SetAlpha(surface, flags, alpha) ((void)0)
 
-#define SDL_Flip(surface) SDL_UpdateWindowSurface(g_sdl_window)
-#define SDL_UpdateRect(surface, x, y, w, h) SDL_UpdateWindowSurface(g_sdl_window)
-#define SDL_UpdateRects(surface, numrects, rects) SDL_UpdateWindowSurfaceRects(g_sdl_window, (rects), (numrects))
+/* If GPU renderer is active, these are handled by GAME_SCREEN_UPDATE.
+ * Otherwise fall back to window surface updates. */
+#define SDL_Flip(surface) ((void)0)
+#define SDL_UpdateRect(surface, x, y, w, h) ((void)0)
+#define SDL_UpdateRects(surface, numrects, rects) ((void)0)
 
 #define SDL_DisplayFormat(surface) \
     SDL_ConvertSurfaceFormat((surface), SDL_PIXELFORMAT_RGB888, 0)
@@ -40,9 +42,16 @@ extern SDL_Window *g_sdl_window;
 
 /* SDL_SetVideoMode -> create window + (renderer on Android) */
 extern SDL_Surface *screen_video;
+/* GPU renderer globals (created lazily on first screen update) */
+extern SDL_Renderer *g_sdl_renderer;
+extern SDL_Texture *g_sdl_texture;
+
 static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32 flags) {
     (void)bpp;
     Uint32 window_flags = SDL_WINDOW_SHOWN;
+#ifdef __ANDROID__
+    window_flags |= SDL_WINDOW_OPENGL;  /* needed for GPU renderer */
+#endif
     if (flags & SDL_FULLSCREEN) window_flags |= SDL_WINDOW_FULLSCREEN;
     g_sdl_window = SDL_CreateWindow("Divi-Dead",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
