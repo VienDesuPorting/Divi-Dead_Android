@@ -122,5 +122,6 @@ target_link_libraries(dividead
     android
     EGL
     GLESv1_CM
+    GLESv2
     z
 )
