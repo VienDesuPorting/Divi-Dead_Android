@@ -571,36 +571,11 @@ void GAME_UPDATE_DEBUG_INFO() {
 
 void GAME_SCREEN_UPDATE(SDL_Surface *from) {
 #ifdef __ANDROID__
-	/* Scale 640x480 to fill screen while preserving 4:3 aspect ratio */
-	{
-	Uint32 _st = SDL_GetTicks();
-	if (from->w != screen_video->w || from->h != screen_video->h) {
-		/* Calculate scale to fit within screen_video bounds */
-		double scale_x = (double)screen_video->w / from->w;
-		double scale_y = (double)screen_video->h / from->h;
-		double scale = scale_x < scale_y ? scale_x : scale_y;
-		int new_w = (int)(from->w * scale);
-		int new_h = (int)(from->h * scale);
-		SDL_Rect dst = {
-			(screen_video->w - new_w) / 2,  /* center horizontally */
-			(screen_video->h - new_h) / 2,  /* center vertically */
-			new_w, new_h
-		};
-		/* Clear the screen to black first (for letterboxing) */
-		SDL_FillRect(screen_video, NULL, 0);
-		SDL_BlitScaled(from, NULL, screen_video, &dst);
-	} else {
-		SDL_BlitSurface(from, NULL, screen_video, NULL);
-	}
-	SDL_Flip(screen_video);
+	android_gl_render(g_sdl_window, from);
 #else
 	SDL_BlitSurface(from, NULL, screen_video, NULL);
 	SDL_Flip(screen_video);
-	#endif
-	if (SDL_GetTicks() - _st > 10) {
-		printf("SCREEN_UPDATE: %d ms\n", SDL_GetTicks() - _st);
-	}
-	}
+#endif
 	GAME_UPDATE_DEBUG_INFO();
 }
 
