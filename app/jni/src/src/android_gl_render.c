@@ -70,12 +70,32 @@ static GLuint compile_shader(GLenum type, const char *src) {
 int android_gl_init(SDL_Window *window) {
     if (gl_initialized) return 1;
 
+    printf("GL: init starting, window=%p\n", (void*)window);
+    
+    /* Check if window is valid */
+    if (!window) {
+        printf("GL: window is NULL!\n");
+        return 0;
+    }
+
+    /* Set GL attributes for OpenGL ES 2.0 */
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
     /* Create EGL context */
+    printf("GL: creating context...\n");
     gl_context = SDL_GL_CreateContext(window);
     if (!gl_context) {
         printf("GL: SDL_GL_CreateContext failed: %s\n", SDL_GetError());
         return 0;
     }
+    printf("GL: context created OK\n");
 
     /* Make context current */
     if (SDL_GL_MakeCurrent(window, gl_context) < 0) {
@@ -131,7 +151,11 @@ int android_gl_init(SDL_Window *window) {
  * Handles 4:3 letterbox automatically via vertex coordinates. */
 void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     if (!gl_initialized) {
-        if (!android_gl_init(window)) return;
+        printf("GL: first render call, initializing...\n");
+        if (!android_gl_init(window)) {
+            printf("GL: init FAILED, cannot render\n");
+            return;
+        }
     }
 
     SDL_GL_MakeCurrent(window, gl_context);
@@ -152,6 +176,12 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0,
                  GL_BGRA_EXT, GL_UNSIGNED_BYTE, surface->pixels);
     SDL_UnlockSurface(surface);
+    /* Check for GL errors */
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        static int gl_error_count = 0;
+        if (gl_error_count++ < 3) printf("GL: error after texImage2D: 0x%x\n", err);
+    }
 
     /* Render fullscreen quad with letterbox */
     glViewport(0, 0, win_w, win_h);
