@@ -164,16 +164,23 @@ void TOUCH_CLEAR_MENU_GEOMETRY(void) {
 int TOUCH_GET_MENU_ITEM(float touch_x, float touch_y, int screen_w, int screen_h) {
     if (!menu_geom.active || menu_geom.count <= 0) return -1;
 
-    int screen_x = (int)(touch_x * screen_w);
-    int screen_y = (int)(touch_y * screen_h);
+    /* Get real window size (screen_w/h may be 640x480 dummy surface) */
+    extern SDL_Window *g_sdl_window;
+    int real_w = screen_w, real_h = screen_h;
+    if (g_sdl_window) {
+        SDL_GetWindowSize(g_sdl_window, &real_w, &real_h);
+    }
 
-    double scale_x = (double)screen_w / 640.0;
-    double scale_y = (double)screen_h / 480.0;
+    int screen_x = (int)(touch_x * real_w);
+    int screen_y = (int)(touch_y * real_h);
+
+    double scale_x = (double)real_w / 640.0;
+    double scale_y = (double)real_h / 480.0;
     double scale = scale_x < scale_y ? scale_x : scale_y;
     int game_w = (int)(640 * scale);
     int game_h = (int)(480 * scale);
-    int offset_x = (screen_w - game_w) / 2;
-    int offset_y = (screen_h - game_h) / 2;
+    int offset_x = (real_w - game_w) / 2;
+    int offset_y = (real_h - game_h) / 2;
 
     if (screen_x < offset_x || screen_x >= offset_x + game_w) return -1;
     if (screen_y < offset_y || screen_y >= offset_y + game_h) return -1;

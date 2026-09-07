@@ -24,6 +24,10 @@ KOS_INIT_FLAGS(INIT_DEFAULT);
 #include "main.h"
 #include "touch_input.h"
 #ifdef __ANDROID__
+extern int android_gl_init(SDL_Window *window);
+extern void android_gl_render(SDL_Window *window, SDL_Surface *surface);
+#endif
+#ifdef __ANDROID__
 extern int android_extract_assets(void);
 extern const char *android_get_data_path(const char *filename);
 #endif
@@ -652,10 +656,6 @@ int rc = 0;
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
 	
-#ifdef __ANDROID__
-	GAME_SCREEN_UPDATE(screen);
-	return;
-#endif
 	
 	
 	
@@ -834,12 +834,7 @@ void sdl_init() {
 		r.h = s->h;
 		SDL_BlitSurface(s, NULL, screen, &r);
 		SDL_FreeSurface(s);
-#ifdef __ANDROID__
 		GAME_SCREEN_UPDATE(screen);
-#else
-		SDL_BlitSurface(screen, NULL, screen_video, NULL);
-		SDL_Flip(screen_video);
-#endif
 		
 		/* Extract assets to internal storage while splash is visible */
 		#ifdef __ANDROID__

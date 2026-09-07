@@ -74,6 +74,7 @@ set(DIVIDEAD_SOURCES
     src/src/android_log.c
     src/src/android_asset_extract.c
     src/src/android_video.c
+    src/src/android_gl_render.c
     src/src/movie.c
 # ROQ sources added conditionally below
     src/RES/FONT_TTF.c

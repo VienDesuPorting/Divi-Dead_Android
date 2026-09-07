@@ -43,12 +43,21 @@ extern SDL_Surface *screen_video;
 static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32 flags) {
     (void)bpp;
     Uint32 window_flags = SDL_WINDOW_SHOWN;
+#ifdef __ANDROID__
+    window_flags |= SDL_WINDOW_OPENGL;
+#endif
     if (flags & SDL_FULLSCREEN) window_flags |= SDL_WINDOW_FULLSCREEN;
     g_sdl_window = SDL_CreateWindow("Divi-Dead",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         w, h, window_flags);
     if (!g_sdl_window) return NULL;
+#ifdef __ANDROID__
+    /* Don't use SDL_GetWindowSurface - we render via OpenGL ES.
+     * Return dummy surface for dimension queries only. */
+    return SDL_CreateRGBSurface(0, w, h, 32, 0, 0, 0, 0);
+#else
     return SDL_GetWindowSurface(g_sdl_window);
+#endif
 }
 #define SDL_SetVideoMode(w, h, bpp, flags) SDL_SetVideoMode_compat((w), (h), (bpp), (flags))
 
