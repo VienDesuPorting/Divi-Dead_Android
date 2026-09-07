@@ -23,6 +23,9 @@
 #include <SDL2/SDL_syswm.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#ifndef GL_BGRA_EXT
+#define GL_BGRA_EXT 0x80E1
+#endif
 
 static SDL_GLContext gl_context = NULL;
 static GLuint gl_program = 0;
@@ -147,7 +150,7 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     SDL_LockSurface(surface);
     glBindTexture(GL_TEXTURE_2D, gl_texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0,
-                 GL_BGRA, GL_UNSIGNED_BYTE, surface->pixels);
+                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, surface->pixels);
     SDL_UnlockSurface(surface);
 
     /* Render fullscreen quad with letterbox */
