@@ -178,34 +178,11 @@ int VFS_READ(FSLI *slice, uint8_t *buffer) {
 	return 0;
 }
 
-void LZ_UNCOMPRESS(uint8_t *input, uint32_t input_length, uint8_t *output, uint32_t *output_length) {
-	uint8_t ring[0x1000]; uint16_t rinp = 0xFEE; int n;
-	for (n = 0; n < 0x1000; n++) ring[n] = 0;
-	uint8_t *input_end = input + input_length;
-	uint8_t *output_start = output;
-	
-	while (input < input_end) {
-		uint32_t code = *input | 0x100;
-		for (input++; code != 1; code >>= 1) {
-			if (code & 1) {
-				ring[rinp++] = *output++ = *input++;
-				rinp &= 0xFFF;
-			} else {
-				uint8_t l, h;
-				if (input >= input_end) break;
-				l = *input++; h = *input++;
-				uint16_t d = l | (h << 8);
-				uint16_t p = (d & 0xFF) | ((d >> 4) & 0xF00);
-				uint16_t s = ((d >> 8) & 0xF) + 3;
-				while (s--) {
-					*output++ = ring[rinp++] = ring[p++];
-					p &= 0xFFF; rinp &= 0xFFF;
-				}
-			}
-		}
-	}
+/* Optimized LZ decompressor (defined in lz_decompress_arm.c) */
+extern void LZ_UNCOMPRESS_OPT(uint8_t *input, uint32_t input_length, uint8_t *output, uint32_t *output_length);
 
-	if (output_length) *output_length = output - output_start;
+void LZ_UNCOMPRESS(uint8_t *input, uint32_t input_length, uint8_t *output, uint32_t *output_length) {
+	LZ_UNCOMPRESS_OPT(input, input_length, output, output_length);
 }
 
 SDL_RWops *VFS_LOAD_EX(char *name) {
