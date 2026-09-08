@@ -584,7 +584,7 @@ void GAME_SCREEN_UPDATE_RECT(SDL_Surface *from, SDL_Rect *rect) {
 	GAME_SCREEN_UPDATE(from);
 }
 
-//#define UPDATE_RECTS_OPTIMIZED
+#define UPDATE_RECTS_OPTIMIZED
 //#define UPDATE_METHOD_1
 
 void GAME_SCREEN_UPDATE_RECTS(SDL_Surface *from, int numrects, SDL_Rect *rects) {
@@ -630,6 +630,14 @@ int rc = 0;
 
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
+	
+#ifdef __ANDROID__
+	/* Transition animations cause visible delay on Android because
+	 * each step does multiple GL uploads + swaps. Skip animation
+	 * and show the result immediately. */
+	GAME_SCREEN_UPDATE(screen);
+	return;
+#endif
 	
 	
 	
