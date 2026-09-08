@@ -46,7 +46,7 @@ void LZ_UNCOMPRESS_OPT(uint8_t *restrict input, uint32_t input_length,
                 rinp = (rinp + 1) & 0xFFF;
             } else {
                 /* Match: read 2 bytes, extract position and length */
-                if (__builtin_expect(input >= input_end, 0)) goto done;
+                if (__builtin_expect(input + 1 >= input_end, 0)) goto done;
                 
                 uint32_t d = input[0] | (input[1] << 8);
                 input += 2;
@@ -57,9 +57,15 @@ void LZ_UNCOMPRESS_OPT(uint8_t *restrict input, uint32_t input_length,
                 /* Copy from ring to output.
                  * Optimize: if the copy doesn't cross the 0xFFF boundary
                  * and doesn't overlap with rinp, use bulk copy. */
+                /* Fast path: no wrap-around, no overlap.
+                 * Overlap occurs when pos and rinp ranges intersect.
+                 * With overlap, the original reads ring[p] then writes ring[rinp]
+                 * sequentially. Our batch read would read stale data. */
+                uint32_t dist = (rinp >= pos) ? (rinp - pos) : (pos - rinp);
                 if (__builtin_expect(len <= 8 && 
-                    pos + len <= 0x1000 && rinp + len <= 0x1000, 1)) {
-                    /* Fast path: no wrap-around, small copy */
+                    pos + len <= 0x1000 && rinp + len <= 0x1000 &&
+                    dist >= len, 1)) {
+                    /* Fast path: no wrap-around, no overlap */
                     for (uint32_t i = 0; i < len; i++) {
                         uint8_t b = lz_ring[pos + i];
                         output[i] = b;
