@@ -77,7 +77,10 @@ public class SplashActivity extends Activity {
 
         addButton(buttonBar, "btn_yt", "https://www.youtube.com/@viendesu", btnParams);
         addButton(buttonBar, "btn_tg", tgLink, btnParams);
-        addButton(buttonBar, "btn_vk", "https://vk.com/viendesu", btnParams);
+        // VK only for Russian variant
+        if ("ru".equals(LINK_VARIANT)) {
+            addButton(buttonBar, "btn_vk", "https://vk.com/viendesu", btnParams);
+        }
         addButton(buttonBar, "btn_web", "https://viende.su", btnParams);
 
         RelativeLayout.LayoutParams barParams = new RelativeLayout.LayoutParams(
