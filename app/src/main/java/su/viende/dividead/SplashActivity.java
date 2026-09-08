@@ -20,6 +20,9 @@ import android.view.Gravity;
 public class SplashActivity extends Activity {
 
     private static final int SPLASH_DELAY_MS = 3000;
+    
+    // Change this to "en" for English Telegram channel
+    private static final String LINK_VARIANT = "ru";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -27,7 +30,6 @@ public class SplashActivity extends Activity {
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         
-        // Fullscreen - modern API for API 30+, legacy for older
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
         } else {
@@ -68,8 +70,13 @@ public class SplashActivity extends Activity {
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(btnSize, btnSize);
         btnParams.setMargins(btnSpacing, 0, btnSpacing, 0);
 
+        // Telegram link depends on LINK_VARIANT
+        String tgLink = "ru".equals(LINK_VARIANT) 
+            ? "https://t.me/visual_novels_for_android"
+            : "https://t.me/visual_novels_android_eng";
+
         addButton(buttonBar, "btn_yt", "https://www.youtube.com/@viendesu", btnParams);
-        addButton(buttonBar, "btn_tg", "https://t.me/pufkein", btnParams);
+        addButton(buttonBar, "btn_tg", tgLink, btnParams);
         addButton(buttonBar, "btn_vk", "https://vk.com/viendesu", btnParams);
         addButton(buttonBar, "btn_web", "https://viende.su", btnParams);
 
