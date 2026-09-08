@@ -614,11 +614,27 @@ SDL_Rect rs[3072 * 2 * 4];
 int rc = 0;
 
 #ifdef __ANDROID__
-/* Use glTexSubImage2D for partial texture updates during transitions.
- * Only uploads the changed rectangle, not the full 640x480 surface. */
-#define _UPDATE_RECT_START()
-#define _UPDATE_RECT(r) android_gl_render_rect(g_sdl_window, screen, &r);
-#define _UPDATE_RECT_END()
+/* Batched GL updates: collect all rects in a step, upload once.
+ * Much faster than individual glTexSubImage2D per rect. */
+static SDL_Rect _gl_dirty_rect = {0,0,0,0};
+#define _UPDATE_RECT_START() \
+    _gl_dirty_rect.x = 0; _gl_dirty_rect.w = 0; \
+    _gl_dirty_rect.y = 0x7FFFFFFF; _gl_dirty_rect.h = 0;
+#define _UPDATE_RECT(r) { \
+    if ((r).w > 0) { \
+        if (_gl_dirty_rect.y == 0x7FFFFFFF) _gl_dirty_rect.y = (r).y; \
+        if ((r).y < _gl_dirty_rect.y) _gl_dirty_rect.y = (r).y; \
+        if ((r).y + (r).h > _gl_dirty_rect.y + _gl_dirty_rect.h) \
+            _gl_dirty_rect.h = (r).y + (r).h - _gl_dirty_rect.y; \
+        if ((r).w > _gl_dirty_rect.w) _gl_dirty_rect.w = (r).w; \
+        if ((r).x < _gl_dirty_rect.x || _gl_dirty_rect.w == 0) \
+            _gl_dirty_rect.x = (r).x; \
+    } \
+}
+#define _UPDATE_RECT_END() \
+    if (_gl_dirty_rect.h > 0) { \
+        android_gl_render_rect(g_sdl_window, screen, &_gl_dirty_rect); \
+    }
 #else
 #define _UPDATE_RECT_START()
 #define _UPDATE_RECT(r) GAME_SCREEN_UPDATE_RECT(screen, &r);
