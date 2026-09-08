@@ -26,6 +26,7 @@ KOS_INIT_FLAGS(INIT_DEFAULT);
 #ifdef __ANDROID__
 extern int android_gl_init(SDL_Window *window);
 extern void android_gl_render(SDL_Window *window, SDL_Surface *surface);
+extern void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *rect);
 #endif
 #ifdef __ANDROID__
 extern int android_extract_assets(void);
@@ -612,16 +613,12 @@ void GAME_SCREEN_UPDATE_RECTS(SDL_Surface *from, int numrects, SDL_Rect *rects) 
 SDL_Rect rs[3072 * 2 * 4];
 int rc = 0;
 
-#ifdef UPDATE_RECTS_OPTIMIZED
 #ifdef __ANDROID__
+/* Use glTexSubImage2D for partial texture updates during transitions.
+ * Only uploads the changed rectangle, not the full 640x480 surface. */
 #define _UPDATE_RECT_START()
-#define _UPDATE_RECT(r) GAME_SCREEN_UPDATE(screen);
+#define _UPDATE_RECT(r) android_gl_render_rect(g_sdl_window, screen, &r);
 #define _UPDATE_RECT_END()
-#else
-#define _UPDATE_RECT_START()
-#define _UPDATE_RECT(r) rs[rc++] = r;
-#define _UPDATE_RECT_END() GAME_SCREEN_UPDATE_RECTS(screen, rc, rs);
-#endif
 #else
 #define _UPDATE_RECT_START()
 #define _UPDATE_RECT(r) GAME_SCREEN_UPDATE_RECT(screen, &r);
@@ -631,13 +628,7 @@ int rc = 0;
 void GAME_BUFFER_REPAINT(int effect) {
 	int n, m, y, steps;
 	
-#ifdef __ANDROID__
-	/* Transition animations cause visible delay on Android because
-	 * each step does multiple GL uploads + swaps. Skip animation
-	 * and show the result immediately. */
-	GAME_SCREEN_UPDATE(screen);
-	return;
-#endif
+	
 	
 	
 	
