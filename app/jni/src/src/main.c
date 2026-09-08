@@ -342,21 +342,15 @@ void KEYS_UPDATE() {
 		{
 			uint32_t touch_key = TOUCH_HANDLE_EVENT(&event);
 			if (touch_key & K_A) {
-				/* Check if this is a menu tap */
-				int item = -1;
+								int item = -1;
 				if (event.type == SDL_FINGERUP) {
 					item = TOUCH_GET_MENU_ITEM(
 						event.tfinger.x, event.tfinger.y,
 						screen_video->w, screen_video->h);
-					printf("TOUCH: tap (%.3f,%.3f) screen %dx%d -> item %d\n",
-						event.tfinger.x, event.tfinger.y,
-						screen_video->w, screen_video->h, item);
+					
 				}
 				if (item >= 0) {
-					/* Direct selection: set item index.
-					 * touch_menu_activate will fire the callback
-					 * after the redraw shows the highlight. */
-					touch_menu_select = item;
+										touch_menu_select = item;
 					touch_menu_activate = 1;
 				} else {
 					joy_push_keys(+K_A);
@@ -832,8 +826,7 @@ void sdl_init() {
 			/* Extract all game data from assets/ to internal storage.
 			 * On first launch this takes a few seconds (copying ~100MB).
 			 * On subsequent launches the files already exist and it's instant. */
-			printf("Extracting assets to internal storage...\n");
-			android_extract_assets();
+						android_extract_assets();
 			
 			/* Set game_directory to internal storage so all file reads
 			 * use the fast filesystem instead of slow Android assets */
@@ -845,8 +838,7 @@ void sdl_init() {
 				char *slash = strrchr(dir, '/');
 				if (slash) *slash = 0;
 				snprintf(game_directory, sizeof(game_directory), "%s", dir);
-				printf("game_directory set to: %s\n", game_directory);
-			}
+							}
 			
 			/* Increase image cache */
 			IMAGE_CACHE_MAX = 30;

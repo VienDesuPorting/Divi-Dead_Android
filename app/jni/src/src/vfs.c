@@ -189,9 +189,6 @@ SDL_RWops *VFS_LOAD_EX(char *name) {
 	int loaded = 0;
 	FSLI cfsli = {0};
 	FSLI *fsli = &cfsli;
-	#ifdef __ANDROID__
-	Uint32 _t0 = SDL_GetTicks();
-	#endif
 	
 	/*#ifdef CHECK_FILESYSTEM	
 	{
@@ -252,14 +249,8 @@ SDL_RWops *VFS_LOAD_EX(char *name) {
 		#endif
 		
 		temp2[size_u] = 0;
-		#ifdef __ANDROID__
-		printf("VFS_LOAD_EX('%s'): %d ms (LZ decompressed %d -> %d)\n", name, SDL_GetTicks() - _t0, size_c, size_u);
-		#endif
 		return SDL_RWFromMem(temp2, size_u);
 	} else {		
-		#ifdef __ANDROID__
-		printf("VFS_LOAD_EX('%s'): %d ms (raw %d bytes)\n", name, SDL_GetTicks() - _t0, fsli->len);
-		#endif
 		return SDL_RWFromMem(temp1, fsli->len);
 	}
 }

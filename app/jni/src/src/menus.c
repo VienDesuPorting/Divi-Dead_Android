@@ -70,8 +70,7 @@ int GAME_MENU_SHOW_EX(OPTION_GAME_MENU *menu, int menu_level) {
 	{
 		int menu_y = rect_start.y + interface_title_clip[0].h + 4;
 		TOUCH_SET_MENU_GEOMETRY(rect_start.x, menu_y, lines_h, lines);
-		printf("MENU_GEOM: x=%d y=%d item_h=%d count=%d\n",
-			rect_start.x, menu_y, lines_h, lines);
+		
 	}
 	
 	SDL_BlitSurface(snapshot, NULL, screen, NULL);

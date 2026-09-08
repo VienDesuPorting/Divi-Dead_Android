@@ -5,7 +5,6 @@
 //#define DEBUG_FLIST
 
 #include "system.h"
-#include <errno.h>
 
 char save_buffer[0x1800];
 int save_buffer_size;
@@ -77,7 +76,7 @@ int SYS_SAVE() {
 #endif
 	
 	if (!(f = SDL_RWFromFile(sys_path, "wb"))) {
-		printf("Can't write system (path: %s, errno: %d)\n", sys_path, errno);
+		printf("Can't write system\n");
 		return 0;
 	}	
 #endif

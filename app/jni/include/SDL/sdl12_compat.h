@@ -38,7 +38,7 @@ extern SDL_Window *g_sdl_window;
 #define SDL_DisplayFormatAlpha(surface) \
     SDL_ConvertSurfaceFormat((surface), SDL_PIXELFORMAT_ARGB8888, 0)
 
-/* SDL_SetVideoMode -> create window + (renderer on Android) */
+/* SDL_SetVideoMode -> create window */
 extern SDL_Surface *screen_video;
 static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32 flags) {
     (void)bpp;
@@ -52,8 +52,7 @@ static inline SDL_Surface *SDL_SetVideoMode_compat(int w, int h, int bpp, Uint32
         w, h, window_flags);
     if (!g_sdl_window) return NULL;
 #ifdef __ANDROID__
-    /* Don't use SDL_GetWindowSurface - we render via OpenGL ES.
-     * Return dummy surface for dimension queries only. */
+    /* Dummy surface: we render via OpenGL ES, not window surface */
     return SDL_CreateRGBSurface(0, w, h, 32, 0, 0, 0, 0);
 #else
     return SDL_GetWindowSurface(g_sdl_window);

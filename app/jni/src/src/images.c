@@ -380,9 +380,6 @@ SDL_Surface *GAME_IMAGE_GET_EX3(char *_name1, char *_name2, int usecache, int sc
 	SDL_RWops *f;
 	SDL_Surface *surface = NULL, *surface_o = NULL, *surface_o1 = NULL, *surface_o2 = NULL;
 	char name[0x80] = {0}, name1[0x40] = {0}, name2[0x40] = {0};
-	#ifdef __ANDROID__
-	Uint32 _t0 = SDL_GetTicks();
-	#endif
 	if (_name1) sprintf(name1, strrchr(_name1, '.') ? "%s" : "%s.BMP", _name1);
 	if (_name2) sprintf(name2, strrchr(_name2, '.') ? "%s" : "%s.BMP", _name2);
 	sprintf(name, "%s#%s", name1, name2);
@@ -570,9 +567,6 @@ SDL_Surface *GAME_IMAGE_GET_EX3(char *_name1, char *_name2, int usecache, int sc
 		}
 	}
 	
-	#ifdef __ANDROID__
-	printf("IMG_LOAD('%s'): %d ms\n", name, SDL_GetTicks() - _t0);
-	#endif
 	#ifdef DEBUG_IMAGES
 		printf("\n");
 	#endif

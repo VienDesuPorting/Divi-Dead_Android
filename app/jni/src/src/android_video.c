@@ -1,9 +1,4 @@
-/*
- * android_video.c - Video playback using Android MediaPlayer via JNI.
- *
- * Calls DiviDeadActivity.playVideo(path, skipAllowed) which creates a
- * MediaPlayer + SurfaceView to play the video fullscreen.
- */
+/* Video playback via Android MediaPlayer (JNI) */
 
 #ifdef __ANDROID__
 
@@ -66,14 +61,7 @@ int android_play_video(const char *path, int skip) {
         return 0;
     }
     
-    /* We need to call this on the UI thread, but playVideo blocks until done.
-     * Use a global ref to avoid issues with local refs. */
     jobject globalActivity = (*env)->NewGlobalRef(env, activity);
-    
-    /* Detach current thread from JVM (we might be on the SDL thread) */
-    /* Actually, SDL_AndroidGetJNIEnv already handles thread attachment. */
-    
-    /* Call playVideo - this blocks until the video finishes */
     jint result = (*env)->CallIntMethod(env, globalActivity, mid, jpath, skip);
     
     if ((*env)->ExceptionCheck(env)) {

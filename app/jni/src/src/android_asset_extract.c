@@ -204,7 +204,7 @@ static int extract_all_assets(void) {
         }
     }
     
-    LOGI("extract_all: %d extracted, %d failed, %d skipped", ok - fail, fail, 0);
+    LOGI("Assets: %d files OK", ok);
     
     /* Write a marker file to indicate extraction is complete */
     snprintf(path, sizeof(path), "%s/.extracted", dir);

@@ -1,10 +1,4 @@
-/*
- * android_gl_render.c - GPU-accelerated rendering using SDL2's GL API
- * and OpenGL ES 2.0.
- *
- * Uses glTexSubImage2D for partial texture updates during transitions,
- * instead of glTexImage2D (full texture upload) for every frame.
- */
+/* GPU rendering via SDL2 GL + OpenGL ES 2.0 */
 
 #ifdef __ANDROID__
 
@@ -70,15 +64,12 @@ int android_gl_init(SDL_Window *window) {
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    printf("GL: creating context...\n");
     gl_context = SDL_GL_CreateContext(window);
     if (!gl_context) {
-        printf("GL: SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+        printf("GL: context failed: %s\n", SDL_GetError());
         return 0;
     }
-    printf("GL: context created OK\n");
-
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
+        GLuint vs = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
     GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
     if (!vs || !fs) return 0;
 
@@ -117,11 +108,9 @@ int android_gl_init(SDL_Window *window) {
     return 1;
 }
 
-/* Full surface upload + render. Used for normal screen updates. */
 void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     if (!gl_initialized) {
-        printf("GL: first render call, initializing...\n");
-        if (!android_gl_init(window)) { printf("GL: init FAILED\n"); return; }
+        if (!android_gl_init(window)) return;
     }
 
     SDL_GL_MakeCurrent(window, gl_context);
@@ -129,14 +118,14 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     int win_w, win_h;
     SDL_GetWindowSize(window, &win_w, &win_h);
 
-    /* Upload entire surface to texture */
+    
     SDL_LockSurface(surface);
     glBindTexture(GL_TEXTURE_2D, gl_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surface->w, surface->h,
                     GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
     SDL_UnlockSurface(surface);
 
-    /* Calculate letterbox quad */
+    
     double scale_x = (double)win_w / 640.0;
     double scale_y = (double)win_h / 480.0;
     double scale = scale_x < scale_y ? scale_x : scale_y;
@@ -169,9 +158,6 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     SDL_GL_SwapWindow(window);
 }
 
-/* Partial surface update + render. Used for transition effects.
- * Only uploads the changed rectangle (much faster than full upload).
- * rect is in 640x480 surface coordinates. */
 void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *rect) {
     if (!gl_initialized) {
         if (!android_gl_init(window)) return;
@@ -182,9 +168,7 @@ void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *
     int win_w, win_h;
     SDL_GetWindowSize(window, &win_w, &win_h);
 
-    /* Upload ONLY the changed rectangle to texture.
-     * OpenGL ES 2.0 doesn't support GL_UNPACK_ROW_LENGTH, so we
-     * copy the sub-rect into a contiguous temp buffer. */
+    
     SDL_LockSurface(surface);
 
     int bytes_per_pixel = surface->format->BytesPerPixel;
@@ -208,7 +192,7 @@ void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *
     }
     SDL_UnlockSurface(surface);
 
-    /* Render fullscreen quad (same as full render) */
+    
     double scale_x = (double)win_w / 640.0;
     double scale_y = (double)win_h / 480.0;
     double scale = scale_x < scale_y ? scale_x : scale_y;
