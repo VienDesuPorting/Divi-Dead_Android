@@ -63,7 +63,7 @@ public class SplashActivity extends Activity {
         buttonBar.setOrientation(LinearLayout.HORIZONTAL);
         buttonBar.setGravity(Gravity.CENTER);
 
-        int btnSize = (int)(48 * density);
+        int btnSize = (int)(38 * density);
         int btnSpacing = (int)(20 * density);
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(btnSize, btnSize);
         btnParams.setMargins(btnSpacing, 0, btnSpacing, 0);
