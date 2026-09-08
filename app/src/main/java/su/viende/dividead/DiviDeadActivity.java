@@ -56,6 +56,7 @@ public class DiviDeadActivity extends SDLActivity {
         hideSystemUI();
     }
     
+    @SuppressWarnings("deprecation")
     private void hideSystemUI() {
         View decorView = getWindow().getDecorView();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

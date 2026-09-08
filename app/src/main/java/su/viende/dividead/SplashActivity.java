@@ -2,11 +2,14 @@ package su.viende.dividead;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
@@ -14,16 +17,6 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.view.Gravity;
 
-/**
- * Splash screen with logo + social media buttons.
- * 
- * Images in res/drawable/:
- *   - splash_logo.png (512x512, centered)
- *   - btn_yt.png (64x64, YouTube)
- *   - btn_tg.png (64x64, Telegram)
- *   - btn_vk.png (64x64, VK)
- *   - btn_web.png (64x64, Website)
- */
 public class SplashActivity extends Activity {
 
     private static final int SPLASH_DELAY_MS = 3000;
@@ -33,8 +26,14 @@ public class SplashActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                             WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        
+        // Fullscreen - modern API for API 30+, legacy for older
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+        } else {
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
 
         RelativeLayout root = new RelativeLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -43,7 +42,7 @@ public class SplashActivity extends Activity {
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
 
-        // --- Logo (centered, max 60% of screen width) ---
+        // --- Logo (centered, max 60% width / 50% height) ---
         int logoId = getResources().getIdentifier("splash_logo", "drawable", getPackageName());
         ImageView logo = new ImageView(this);
         if (logoId != 0) {
@@ -52,7 +51,6 @@ public class SplashActivity extends Activity {
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         logo.setAdjustViewBounds(true);
 
-        // Logo: max 60% of screen width, max 50% of screen height
         int maxLogoW = (int)(screenWidth * 0.6);
         int maxLogoH = (int)(screenHeight * 0.5);
         RelativeLayout.LayoutParams logoParams = new RelativeLayout.LayoutParams(maxLogoW, maxLogoH);
@@ -60,18 +58,16 @@ public class SplashActivity extends Activity {
         logo.setLayoutParams(logoParams);
         root.addView(logo);
 
-        // --- Social buttons row ---
+        // --- Social buttons ---
         LinearLayout buttonBar = new LinearLayout(this);
         buttonBar.setOrientation(LinearLayout.HORIZONTAL);
         buttonBar.setGravity(Gravity.CENTER);
 
-        // Buttons: 48dp each (scales well on all densities)
         int btnSize = (int)(48 * density);
         int btnSpacing = (int)(20 * density);
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(btnSize, btnSize);
         btnParams.setMargins(btnSpacing, 0, btnSpacing, 0);
 
-        // Add buttons (only if resources exist)
         addButton(buttonBar, "btn_yt", "https://www.youtube.com/@viendesu", btnParams);
         addButton(buttonBar, "btn_tg", "https://t.me/pufkein", btnParams);
         addButton(buttonBar, "btn_vk", "https://vk.com/viendesu", btnParams);
@@ -87,11 +83,8 @@ public class SplashActivity extends Activity {
         root.addView(buttonBar);
 
         setContentView(root);
-
-        // Immersive mode
         hideSystemUI();
 
-        // Transition to game after delay
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -117,17 +110,28 @@ public class SplashActivity extends Activity {
         parent.addView(btn, params);
     }
 
+    @SuppressWarnings("deprecation")
     private void hideSystemUI() {
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            | View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        }
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onResume() {
         super.onResume();
         hideSystemUI();
