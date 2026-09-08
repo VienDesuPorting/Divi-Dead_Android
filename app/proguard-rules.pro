@@ -2,4 +2,4 @@
 -keep class org.libsdl.app.** { *; }
 
 # Divi-Dead app
--keep class com.dividead.android.** { *; }
+-keep class su.viende.dividead.** { *; }

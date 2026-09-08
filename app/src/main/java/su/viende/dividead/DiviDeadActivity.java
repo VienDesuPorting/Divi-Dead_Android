@@ -1,4 +1,4 @@
-package com.dividead.android;
+package su.viende.dividead;
 
 import org.libsdl.app.SDLActivity;
 import android.view.View;

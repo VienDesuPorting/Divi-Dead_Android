@@ -40,7 +40,7 @@ static const char *get_internal_dir(void) {
     if (internal_dir[0]) return internal_dir;
     
     /* Use SDL_GetPrefPath which returns the internal storage path */
-    char *pref = SDL_GetPrefPath("com.dividead.android", "dividead");
+    char *pref = SDL_GetPrefPath("su.viende.dividead", "dividead");
     if (pref) {
         strncpy(internal_dir, pref, sizeof(internal_dir) - 1);
         SDL_free(pref);
@@ -50,8 +50,8 @@ static const char *get_internal_dir(void) {
         return internal_dir;
     }
     
-    /* Fallback: use /data/data/com.dividead.android/files */
-    strcpy(internal_dir, "/data/data/com.dividead.android/files");
+    /* Fallback: use /data/data/su.viende.dividead/files */
+    strcpy(internal_dir, "/data/data/su.viende.dividead/files");
     return internal_dir;
 }
 

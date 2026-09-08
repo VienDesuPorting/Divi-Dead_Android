@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.dividead.android">
+    package="su.viende.dividead">
 
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-feature android:glEsVersion="0x00010000" android:required="true" />
@@ -17,7 +17,7 @@
 
         <!-- Splash screen (LAUNCHER) -->
         <activity
-            android:name="com.dividead.android.SplashActivity"
+            android:name="su.viende.dividead.SplashActivity"
             android:screenOrientation="landscape"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true">
@@ -29,7 +29,7 @@
 
         <!-- Game activity (launched by SplashActivity) -->
         <activity
-            android:name="com.dividead.android.DiviDeadActivity"
+            android:name="su.viende.dividead.DiviDeadActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|navigation|uiMode|fontScale"
             android:screenOrientation="landscape"
             android:exported="false"

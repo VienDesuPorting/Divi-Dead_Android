@@ -1,4 +1,4 @@
-package com.dividead.android;
+package su.viende.dividead;
 
 import android.app.Activity;
 import android.content.Intent;
