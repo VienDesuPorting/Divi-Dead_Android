@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "su.viende.dividead"
-        minSdk 21
+        minSdk 24
         targetSdk 35
         versionCode 1
         versionName "1.0"
@@ -20,7 +20,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments '-DANDROID_STL=c++_static',
-                          '-DANDROID_PLATFORM=android-21'
+                          '-DANDROID_PLATFORM=android-24'
                 cFlags '-D__ANDROID__',
                        '-DHOME_DIRECTORY',
                        '-DGAME_HOME_DIRECTORY',
