@@ -182,19 +182,30 @@ void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *
     int win_w, win_h;
     SDL_GetWindowSize(window, &win_w, &win_h);
 
-    /* Upload ONLY the changed rectangle to texture */
+    /* Upload ONLY the changed rectangle to texture.
+     * OpenGL ES 2.0 doesn't support GL_UNPACK_ROW_LENGTH, so we
+     * copy the sub-rect into a contiguous temp buffer. */
     SDL_LockSurface(surface);
 
-    /* Calculate the source pointer for the sub-rect */
+    int bytes_per_pixel = surface->format->BytesPerPixel;
     Uint8 *src = (Uint8 *)surface->pixels;
-    src += rect->y * surface->pitch;
-    src += rect->x * surface->format->BytesPerPixel;
+    src += rect->y * surface->pitch + rect->x * bytes_per_pixel;
 
-    glBindTexture(GL_TEXTURE_2D, gl_texture);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, surface->w);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, rect->x, rect->y, rect->w, rect->h,
-                    GL_RGBA, GL_UNSIGNED_BYTE, src);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    /* Allocate temp buffer for contiguous row data */
+    int buf_size = rect->w * rect->h * bytes_per_pixel;
+    Uint8 *buf = (Uint8 *)malloc(buf_size);
+    if (buf) {
+        /* Copy rows from surface to temp buffer (removing pitch padding) */
+        for (int row = 0; row < rect->h; row++) {
+            memcpy(buf + row * rect->w * bytes_per_pixel,
+                   src + row * surface->pitch,
+                   rect->w * bytes_per_pixel);
+        }
+        glBindTexture(GL_TEXTURE_2D, gl_texture);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, rect->x, rect->y, rect->w, rect->h,
+                        GL_RGBA, GL_UNSIGNED_BYTE, buf);
+        free(buf);
+    }
     SDL_UnlockSurface(surface);
 
     /* Render fullscreen quad (same as full render) */
