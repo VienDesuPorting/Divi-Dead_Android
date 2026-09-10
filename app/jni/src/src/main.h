@@ -57,10 +57,6 @@ extern void lang_postinit();
 //#define CHECK_FILESYSTEM
 //#define EMULATE_PSP
 
-//#define ENABLE_VIDEO_SMPEG
-
-//#define LANGUAGE_DEFAULT "SPANISH"
-//#define LANGUAGE_DEFAULT "JAPANESE"
 #define LANGUAGE_DEFAULT "ENGLISH"
 #define LANGUAGE_DEFAULT_UNDERSCORE "english"
 #define ENABLE_MUSIC 1
@@ -197,26 +193,26 @@ extern uint32_t   mem4(uint8_t *ptr);
 extern int iround(double r);
 
 struct save_struct_game {
-	char script[0x20];
-	char background_o[0x20];
-	char background_i[0x20];
-	char background_v[0x20];
-	char character_1[0x20];
-	char character_2[0x20];
-	char unknown[0x20];
-	char music[0x20];
-	uint16_t cursor1;
-	uint16_t cursor2;
-	uint32_t script_pos;
-	uint32_t script_menu_return;
-	uint32_t flags[1000];
+        char script[0x20];
+        char background_o[0x20];
+        char background_i[0x20];
+        char background_v[0x20];
+        char character_1[0x20];
+        char character_2[0x20];
+        char unknown[0x20];
+        char music[0x20];
+        uint16_t cursor1;
+        uint16_t cursor2;
+        uint32_t script_pos;
+        uint32_t script_menu_return;
+        uint32_t flags[1000];
 };
 
 struct save_gallery {
-	char names[10][0x19];
-	uint16_t unk[110];
-	uint16_t gallery[152];
-	uint16_t unk2[1750];
+        char names[10][0x19];
+        uint16_t unk[110];
+        uint16_t gallery[152];
+        uint16_t unk2[1750];
 };
 
 extern struct save_struct_game save;

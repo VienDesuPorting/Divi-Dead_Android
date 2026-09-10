@@ -77,7 +77,6 @@ set(DIVIDEAD_SOURCES
     src/src/android_gl_render.c
     src/src/lz_decompress_arm.c
     src/src/movie.c
-# ROQ sources added conditionally below
     src/RES/FONT_TTF.c
     src/RES/FONT2_TTF.c
     src/RES/CLICK_WAV.c
@@ -90,19 +89,12 @@ set(DIVIDEAD_SOURCES
     src/RES/ROLL2_PNG.c
     src/RES/ROLL_TXT.c
 )
-if(NOT ANDROID)
-    list(APPEND DIVIDEAD_SOURCES
-        src/src/roq/dreamroqlib.c
-        src/src/roq/sdl-dreamroq.c
-    )
-endif()
 
 add_library(dividead SHARED ${DIVIDEAD_SOURCES})
 
 target_include_directories(dividead PRIVATE
     src/src
     src/RES
-    src/src/roq
     include                      # Wrapper: SDL/ -> SDL2/
     ${SDL2_INCLUDES}
     ${SDL2_INCLUDES}/SDL2       # For direct SDL2/ includes

@@ -47,12 +47,6 @@ extern int MAIN_MENU_GAME_OPTIONS_VOICE(int p);
 extern int MAIN_MENU_GAME_OPTIONS_MUSIC(int p);
 extern int MAIN_MENU_GAME_OPTIONS(int p);
 
-extern int OPTION_SELECT_LANG(int p);
-
-extern OPTION_GAME_MENU main_menu_langs[8];
-
-extern int MAIN_MENU_GAME_LANG(int p);
-
 extern OPTION_GAME_MENU main_menu_ingame[7];
 extern OPTION_GAME_MENU main_menu_title[7];
 
