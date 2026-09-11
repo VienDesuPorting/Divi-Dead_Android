@@ -60,6 +60,35 @@ You need the original 1998 PC version of Divi-Dead. Copy its files into the proj
 
 This copies `SG.DL1`, `WV.DL1`, `OGG/*.OGG`, and `CS_ROGO.MPG` into `app/src/main/assets/`. (The helper also tries to copy `LANG/ENGLISH.TXT` if present, but it's optional — see [Localization](#localization).)
 
+#### Music: MIDI → OGG conversion
+
+The original PC version ships background music as `.MID` files. `SDL_mixer` on Android doesn't include a MIDI synthesizer, so the engine reads OGG files instead. The expected filenames are `<original>.MID.OGG` — that is, the original MIDI filename with `.OGG` appended (e.g. `OPENING.MID` → `OPENING.MID.OGG`, `BGM_1.MID` → `BGM_1.MID.OGG`).
+
+If you already have the PSP version of the game, you can just copy its pre-converted `OGG/` folder. If you're starting from the PC version, convert the MIDIs with ffmpeg (requires a working TiMidity + soundfont setup) or fluidsynth:
+
+```bash
+# ffmpeg — simple, but quality depends on bundled soundfont
+cd /path/to/your/dividead-pc-install/MIDI
+for f in *.MID; do
+    ffmpeg -i "$f" -c:a libvorbis -q:a 4 "${f}.OGG"
+done
+# → produces OPENING.MID.OGG, BGM_1.MID.OGG, ...
+# Move them into OGG/ before running populate_assets.sh
+mkdir -p ../OGG && mv *.MID.OGG ../OGG/
+```
+
+```bash
+# fluidsynth — better quality, requires a soundfont (.sf2)
+cd /path/to/your/dividead-pc-install/MIDI
+SF=/path/to/GeneralUser.sf2
+for f in *.MID; do
+    fluidsynth -ni -g 0.5 "$SF" "$f" -F "${f}.OGG"
+done
+mkdir -p ../OGG && mv *.MID.OGG ../OGG/
+```
+
+Either way, the result should be an `OGG/` folder with files named `*.MID.OGG` — `populate_assets.sh` will pick it up.
+
 ### Build
 
 Open in Android Studio Narwhal (2025.1.1) or later and press Run, or:
@@ -295,7 +324,7 @@ Android's `AssetManager` is slow for large PAK files because every `SDL_RWFromFi
    LANG/ENGLISH.TXT,
    OGG/OPENING.MID.OGG, OGG/BGM_1.MID.OGG ... OGG/OUTSIDE.MID.OGG
    ```
-   (`LANG/ENGLISH.TXT` is optional — see [Localization](#localization).)
+   (`LANG/ENGLISH.TXT` is optional — see [Localization](#localization). The `OGG/*.MID.OGG` files are pre-converted from the original MIDI — see [Music: MIDI → OGG conversion](#music-midi--ogg-conversion).)
 4. For each file: if it already exists in internal storage, skip it. Otherwise open it via `AAssetManager_open(..., AASSET_MODE_STREAMING)` and stream-copy to the destination with a 64 KB buffer.
 5. Write a `.extracted` marker file when done. Subsequent launches short-circuit.
 

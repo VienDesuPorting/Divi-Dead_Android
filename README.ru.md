@@ -60,6 +60,35 @@ cd Divi-dead_android
 
 Скопирует `SG.DL1`, `WV.DL1`, `OGG/*.OGG` и `CS_ROGO.MPG` в `app/src/main/assets/`. (Скрипт также пытается скопировать `LANG/ENGLISH.TXT`, если он есть — но файл опциональный, см. [Локализация](#локализация).)
 
+#### Музыка: конвертация MIDI → OGG
+
+Оригинальная PC-версия хранит музыку как `.MID` файлы. В `SDL_mixer` на Android нет MIDI-синтезатора, поэтому движок читает OGG. Ожидаемые имена файлов — `<оригинал>.MID.OGG`, то есть оригинальное имя MIDI-файла с добавленным `.OGG` (например, `OPENING.MID` → `OPENING.MID.OGG`, `BGM_1.MID` → `BGM_1.MID.OGG`).
+
+Если у вас есть PSP-версия игры — просто скопируйте её уже сконвертированную папку `OGG/`. Если стартуете с PC-версии, конвертируйте MIDI через ffmpeg (нужен рабочий TiMidity + soundfont) или fluidsynth:
+
+```bash
+# ffmpeg — проще, но качество зависит от встроенного soundfont
+cd /путь/к/dividead-pc/MIDI
+for f in *.MID; do
+    ffmpeg -i "$f" -c:a libvorbis -q:a 4 "${f}.OGG"
+done
+# → получит OPENING.MID.OGG, BGM_1.MID.OGG, ...
+# Положите в OGG/ перед запуском populate_assets.sh
+mkdir -p ../OGG && mv *.MID.OGG ../OGG/
+```
+
+```bash
+# fluidsynth — качество выше, нужен soundfont (.sf2)
+cd /путь/к/dividead-pc/MIDI
+SF=/путь/к/GeneralUser.sf2
+for f in *.MID; do
+    fluidsynth -ni -g 0.5 "$SF" "$f" -F "${f}.OGG"
+done
+mkdir -p ../OGG && mv *.MID.OGG ../OGG/
+```
+
+В любом случае результат — папка `OGG/` с файлами `*.MID.OGG`, которую `populate_assets.sh` подхватит.
+
 ### Сборка
 
 Откройте проект в Android Studio Narwhal (2025.1.1) или новее и нажмите Run, или:
@@ -295,7 +324,7 @@ Android `AssetManager` медленный для крупных PAK-файлов
    LANG/ENGLISH.TXT,
    OGG/OPENING.MID.OGG, OGG/BGM_1.MID.OGG ... OGG/OUTSIDE.MID.OGG
    ```
-   (`LANG/ENGLISH.TXT` опциональный — см. [Локализация](#локализация).)
+   (`LANG/ENGLISH.TXT` опциональный — см. [Локализация](#локализация). Файлы `OGG/*.MID.OGG` предварительно сконвертированы из оригинальных MIDI — см. [Музыка: конвертация MIDI → OGG](#музыка-конвертация-midi--ogg).)
 4. Для каждого файла: если уже существует во внутреннем хранилище — пропустить. Иначе открыть через `AAssetManager_open(..., AASSET_MODE_STREAMING)` и стрим-копировать в назначение с буфером 64 КБ.
 5. Записать маркер `.extracted` по завершении. Последующие запуски коротко замыкают распаковку.
 
