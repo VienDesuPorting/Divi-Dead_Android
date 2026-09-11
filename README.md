@@ -1,159 +1,519 @@
-# Divi-Dead Android Port
+# Divi-Dead — Android Port
 
-Native Android port of the Divi-Dead visual novel engine, built with SDL2.
-SDL2 is **automatically downloaded** during CMake configure via FetchContent.
+A native Android port of the **Divi-Dead** visual novel (Leaf, 1998). Built on SDL2 with an OpenGL ES 2.0 renderer, Android `MediaPlayer` for video, and a custom touch gesture system. The engine's UI strings are hardcoded in C as English defaults; a translation file (`LANG/*.TXT`) can override them later if needed.
 
-## Quick start
+- **minSdk 24**, **targetSdk 35**
+- ABIs: `arm64-v8a`, `armeabi-v7a`
+- Package: `su.viende.dividead`
 
-### 1. Clone this repo
+---
+
+## Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Project structure](#project-structure)
+- [Rendering](#rendering)
+- [Video playback](#video-playback)
+- [Touch gestures](#touch-gestures)
+- [Asset extraction](#asset-extraction)
+- [Engine patches](#engine-patches)
+- [Localization](#localization)
+- [Build requirements](#build-requirements)
+- [Translation tools](#translation-tools)
+- [Troubleshooting](#troubleshooting)
+- [Credits & license](#credits--license)
+
+---
+
+## Overview
+
+The engine is derived from gameblabla's fork of soywiz's SDL 1.2 interpreter, reworked for SDL2 and adapted for Android. The original PC archives (`SG.DL1` ~112 MB and `WV.DL1` ~315 MB, both LZ77-compressed PAK files) are bundled inside the APK and unpacked to internal storage on first launch.
+
+| Component | Approach |
+|-----------|----------|
+| Window / GL context | `SDL_GL_CreateContext` + OpenGL ES 2.0 |
+| Video | Android `MediaPlayer` (Java) |
+| Touch input | Custom gesture detector → SDL key events |
+| Audio | `SDL_mixer` (OGG Vorbis) |
+| Fonts | `SDL_ttf` with `TTF_RenderUTF8_Shaded` |
+| Saves | `/data/data/su.viende.dividead/files/.dividead/` |
+
+---
+
+## Installation
 
 ```bash
 git clone https://github.com/christopher-vn/Divi-dead_android.git
 cd Divi-dead_android
 ```
 
-No `--recursive` flag needed — SDL2 is fetched automatically by CMake.
+No `--recursive` flag — SDL2, SDL_image, SDL_mixer, SDL_ttf are fetched automatically by CMake `FetchContent`.
 
-### 2. Add game assets
+### Drop in the game assets
+
+You need the original 1998 PC version of Divi-Dead. Copy its files into the project's `assets/` folder with the included helper:
 
 ```bash
-./populate_assets.sh /path/to/your/dividead-folder
+./populate_assets.sh /path/to/your/dividead-pc-install
 ```
 
-Copies `SG.DL1`, `WV.DL1`, `LANG/ENGLISH.TXT`, `OGG/`, `CS_ROGO.MPG`
-into `app/src/main/assets/`.
+This copies `SG.DL1`, `WV.DL1`, `OGG/*.OGG`, and `CS_ROGO.MPG` into `app/src/main/assets/`. (The helper also tries to copy `LANG/ENGLISH.TXT` if present, but it's optional — see [Localization](#localization).)
 
-### 3. Build
+### Build
 
-Open in Android Studio → Sync → Run, or:
+Open in Android Studio Narwhal (2025.1.1) or later and press Run, or:
+
 ```bash
 ./gradlew assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`
+APK output: `app/build/outputs/apk/debug/app-debug.apk`
 
-**Note:** The first build will take longer because CMake downloads SDL2,
-SDL_image, SDL_mixer, and SDL_ttf from GitHub. Subsequent builds use the
-cached downloads.
+> First build downloads ~50 MB of SDL2 source via CMake `FetchContent`. Cached in `~/.gradle/cxx/` for subsequent builds.
 
-## Features
-
-- **Full game engine** with UTF-8 rendering (Cyrillic support)
-- **Touch gesture controls**:
-  - Tap → Select/Confirm
-  - Swipe up → Open menu
-  - Swipe down → Gallery
-  - Swipe left/right → Navigate
-  - Long press → Cancel
-- **640×480 fixed resolution** (gothic frame renders correctly)
-- **OGG music + ROQ video** support
-- **Adaptive launcher icons** (all densities, Android 8+)
-- **Java Activity** (DiviDeadActivity) + SDL2 Java backend
+---
 
 ## Project structure
 
 ```
+Divi-dead_android/
 ├── app/
-│   ├── build.gradle                    # AGP 8.7 config
-│   ├── proguard-rules.pro
+│   ├── build.gradle                          # AGP 8.7.2 config
 │   ├── jni/
-│   │   ├── CMakeLists.txt              # NDK CMake build (FetchContent for SDL2)
+│   │   ├── CMakeLists.txt                    # FetchContent for SDL2 stack
 │   │   └── src/
-│   │       ├── src/                    # Engine source (patched)
-│   │       │   ├── main.c              # + SDL_main.h for Android
-│   │       │   ├── touch_input.c       # Touch gesture handling
-│   │       │   ├── platform.h          # 640×480 + HOME_DIRECTORY
+│   │       ├── src/                          # Engine C sources (patched)
+│   │       │   ├── main.c                    # Main loop + Android entry
+│   │       │   ├── text.c                    # UTF-8 text rendering
+│   │       │   ├── menus.c                   # Title / options / save-load
+│   │       │   ├── script.c                  # In-game script VM
+│   │       │   ├── vfs.c                     # VFS layer over DL1 archives
+│   │       │   ├── images.c                  # LZ image decoder + cache
+│   │       │   ├── audio.c                   # Music / SFX / voice
+│   │       │   ├── touch_input.c             # Touch gesture detector
+│   │       │   ├── android_gl_render.c       # OpenGL ES 2.0 renderer
+│   │       │   ├── android_video.c           # JNI bridge to MediaPlayer
+│   │       │   ├── android_asset_extract.c   # First-launch asset unpacker
+│   │       │   ├── android_log.c             # stdout/stderr → logcat
+│   │       │   ├── lz_decompress_arm.c       # ARM-optimized LZ77
+│   │       │   ├── movie.c                   # MOVIE_PLAY dispatcher
 │   │       │   └── ...
-│   │       └── RES/                    # Compiled resources
+│   │       ├── RES/                          # Compiled-in resources (.c blobs)
+│   │       └── include/SDL/                  # Wrapper mapping SDL/ → SDL2/
+│   │           ├── sdl12_compat.h            # SDL 1.2 → 2.0 shim
+│   │           └── SDL_*.h                   # Original SDL 1.2 headers
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       ├── java/
-│       │   ├── org/libsdl/app/         # SDL2 Java backend
-│       │   └── com/dividead/android/
-│       │       └── DiviDeadActivity.java
-│       ├── res/                        # Launcher icons
-│       └── assets/                     # Game data
-├── fonts/                              # Cyrillic-capable fonts
-├── tools/                              # Translation tools
-├── gradle/wrapper/                     # Gradle 8.11 wrapper
-├── build.gradle
-├── settings.gradle
+│       │   ├── su/viende/dividead/
+│       │   │   ├── SplashActivity.java       # Splash + social buttons
+│       │   │   └── DiviDeadActivity.java     # SDLActivity subclass
+│       │   └── org/libsdl/app/               # SDL2 Java backend
+│       ├── res/                              # Launcher icons, drawables
+│       └── assets/                           # Game data (SG.DL1, WV.DL1, ...)
+├── fonts/                                    # Cyrillic-capable TTFs
+├── tools/
+│   ├── ab_translator.py                      # .AB script extractor / patcher
+│   └── repack_sg.py                          # Repack patched .AB into SG.DL1
 └── gradlew
 ```
 
-## How SDL2 is handled
+---
 
-SDL2, SDL_image, SDL_mixer, and SDL_ttf are **automatically downloaded**
-by CMake using `FetchContent` during the configure step. No git submodules,
-no manual cloning — just build and CMake handles the rest.
+## Rendering
 
-The first build downloads ~50 MB of SDL2 source code (cached in
-`~/.gradle/cxx/` for subsequent builds).
+The port bypasses `SDL_Renderer` entirely. `SDL_Renderer` does not work reliably on Android with OpenGL ES backends across all GPU vendors (Adreno, Mali, PowerVR), so we use raw OpenGL ES 2.0 through `SDL_GL_*` instead.
 
-## Build requirements
+**File:** `app/jni/src/src/android_gl_render.c`
 
-- Android Studio Narwhal (2025.1.1)+ or JDK 17 + SDK + NDK
-- Android Gradle Plugin 8.7.2 (in build.gradle)
-- Gradle 8.11.1 (wrapper included)
-- NDK r25+ (you have r27 — fine)
-- CMake 3.22.1+ (bundled with Android SDK)
+### Init
+
+```c
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+gl_context = SDL_GL_CreateContext(window);
+```
+
+A 640×480 RGBA texture is allocated once. The engine's `SDL_Surface` (640×480, 32 bpp) is uploaded into it each frame.
+
+### Shaders
+
+```glsl
+// Vertex
+attribute vec2 a_position;
+attribute vec2 a_texcoord;
+varying vec2 v_texcoord;
+void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+    v_texcoord = a_texcoord;
+}
+
+// Fragment
+precision mediump float;
+varying vec2 v_texcoord;
+uniform sampler2D u_texture;
+void main() {
+    gl_FragColor = texture2D(u_texture, v_texcoord).bgra;
+}
+```
+
+The `.bgra` swizzle in the fragment shader is needed because `GL_BGRA_EXT` is not supported on Adreno and Mali GPUs. We read `.rgba` and swizzle in-shader instead.
+
+### Per-frame
+
+1. `SDL_LockSurface(screen)` — pause engine access to the pixel buffer.
+2. `glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 640, 480, GL_RGBA, GL_UNSIGNED_BYTE, screen->pixels)` — incremental upload.
+3. Compute letterbox viewport:
+   ```c
+   double scale = min(win_w / 640.0, win_h / 480.0);
+   double qw = (640.0 * scale) / win_w;
+   double qh = (480.0 * scale) / win_h;
+   ```
+4. One `GL_TRIANGLE_STRIP` (4 vertices) covering the letterboxed quad.
+5. `SDL_GL_SwapWindow(window)`.
+
+One GL draw call per frame. No depth, no stencil, no blending — the engine composites everything onto the CPU-side `SDL_Surface` before upload.
+
+### Partial updates
+
+For dirty-rect updates during scene transitions, `android_gl_render_rect()` uploads only the changed sub-rectangle. Rows are copied into a contiguous temp buffer (because `SDL_Surface->pitch` may include padding) before calling `glTexSubImage2D` with `(rect->x, rect->y, rect->w, rect->h)`. Avoids a full 640×480 upload per transition step.
+
+---
+
+## Video playback
+
+Divi-Dead's PC version uses `.MPG` (MPEG-1) and `.AVI` video for the opening and certain cutscenes. The original engine had SMPEG and a Dreamcast ROQ decoder — both removed from this port. The Android version uses Android's `MediaPlayer` API instead.
+
+### Pipeline
+
+```
+Engine (C)                          Java (DiviDeadActivity)             Android
+──────────                          ───────────────────────             ───────
+MOVIE_PLAY(path, skip)
+  └─→ android_play_video()           playVideo(path, skipAllowed)
+        └─→ JNI CallIntMethod ─────→  runOnUiThread { create SurfaceView,
+                                                 attach to activity,
+                                                 MediaPlayer.setDataSource(path),
+                                                 setDisplay(surfaceHolder),
+                                                 prepare(), start() }
+                                                 │
+                                                 ↓
+                                            SurfaceFlinger compositor
+                                                 │
+                                                 ↓
+                                            Hardware video decoder
+                                                 │
+                                                 ↓
+                                            SurfaceView renders
+                                                 │
+            wait on videoPlaying flag ←── completion listener
+            cleanup SurfaceView + MediaPlayer
+            return 1 / 2 / 0
+```
+
+### Return codes
+
+| Value | Meaning |
+|-------|---------|
+| `1` | Video played to completion |
+| `2` | User skipped by tapping |
+| `0` | Playback failed (file missing, decoder error, etc.) |
+
+### Aspect ratio
+
+`SurfaceView` resizes to the video's native dimensions (`onVideoSizeChanged` listener) scaled to fit within the screen while preserving aspect ratio. The video is never stretched.
+
+### Tap-to-skip
+
+If `skipAllowed = 1`, a tap on the `SurfaceView` calls `MediaPlayer.stop()` and the function returns `2`. If `skipAllowed = 0`, the user waits for completion.
+
+**Files:**
+- `app/jni/src/src/android_video.c` — JNI bridge
+- `app/jni/src/src/movie.c` — `MOVIE_PLAY` dispatcher (Android path)
+- `app/src/main/java/su/viende/dividead/DiviDeadActivity.java` — `playVideo()` Java method
+
+---
+
+## Touch gestures
+
+A custom gesture detector maps touch events to the engine's existing key-event system. The engine keeps its `keys` bitmask (`K_A`, `K_B`, `K_L`, `K_R`, `K_UP`, `K_DOWN`, ...), and `touch_input.c` synthesizes the appropriate bits from `SDL_FINGERDOWN` / `SDL_FINGERMOTION` / `SDL_FINGERUP` events.
+
+**File:** `app/jni/src/src/touch_input.c`
+
+### Thresholds
+
+```c
+#define SWIPE_DISTANCE   0.12f   /* 12% of screen = swipe */
+#define SWIPE_MAX_TIME   400     /* must complete within 400ms */
+#define TAP_MAX_TIME     250     /* quick tap = < 250ms */
+#define LONG_PRESS_TIME  600     /* hold 600ms = long press */
+#define TAP_DISTANCE     0.04f   /* max movement for tap = 4% */
+```
+
+### Reading (in-game text)
+
+| Gesture | Action | Key |
+|---------|--------|-----|
+| Tap anywhere | Advance text | `K_A` |
+| Swipe right → | Open in-game menu | `K_L` |
+| Swipe left ← | Back / cancel | `K_B` |
+| Swipe up ↑ | Navigate up | `K_UP` |
+| Swipe down ↓ | Navigate down | `K_DOWN` |
+| Long press (600 ms) | Open gallery / extra menu | `K_R` |
+
+### Menu (title / options)
+
+| Gesture | Action | Key |
+|---------|--------|-----|
+| Tap on menu item | Select that item directly | — |
+| Tap elsewhere | Select highlighted item | `K_A` |
+| Swipe up / down | Navigate items | `K_UP` / `K_DOWN` |
+| Swipe left ← | Cancel / back | `K_B` |
+| Swipe right → | Confirm | `K_A` |
+| Long press | Open gallery | `K_R` |
+
+### Choices (in-game multiple choice)
+
+| Gesture | Action | Key |
+|---------|--------|-----|
+| Tap on choice | Select that choice | — |
+| Swipe up / down | Navigate choices | `K_UP` / `K_DOWN` |
+| Swipe right → | Confirm | `K_A` |
+| Swipe left ← | Cancel | `K_B` |
+
+### Tap-to-select (letterbox-aware)
+
+`TOUCH_GET_MENU_ITEM(touch_x, touch_y, screen_w, screen_h)` converts normalized touch coordinates (0.0–1.0) to a menu item index. The conversion accounts for letterbox offset because the engine runs at 640×480 while the actual window can be any size:
+
+```c
+SDL_GetWindowSize(g_sdl_window, &real_w, &real_h);
+double scale = min(real_w / 640.0, real_h / 480.0);
+int game_w = (int)(640 * scale);
+int game_h = (int)(480 * scale);
+int offset_x = (real_w - game_w) / 2;
+int offset_y = (real_h - game_h) / 2;
+
+int game_x = (screen_x - offset_x) * 640 / game_w;
+int game_y = (screen_y - offset_y) * 480 / game_h;
+return (game_y - menu_geom.y) / menu_geom.item_h;
+```
+
+The menu's layout geometry is published by the engine via `TOUCH_SET_MENU_GEOMETRY(x, y, item_h, count)` when a menu is shown, and cleared via `TOUCH_CLEAR_MENU_GEOMETRY()` when it closes.
+
+---
+
+## Asset extraction
+
+Android's `AssetManager` is slow for large PAK files because every `SDL_RWFromFile` call goes through JNI. To work around this, the port extracts all assets to the app's internal storage (`/data/data/su.viende.dividead/files/`) on first launch and reads from the filesystem thereafter.
+
+**File:** `app/jni/src/src/android_asset_extract.c`
+
+### Extraction logic
+
+1. Get the `AssetManager` via `SDL_AndroidGetActivity()` → `Activity.getAssets()` → `AAssetManager_fromJava()`.
+2. Create subdirectories `LANG/` and `OGG/` under the internal storage root.
+3. Iterate the file list:
+   ```
+   SG.DL1, WV.DL1, CS_ROGO.MPG, OPEN.AVI, CLICK.WAV, ICMP.DAT,
+   LANG/ENGLISH.TXT,
+   OGG/OPENING.MID.OGG, OGG/BGM_1.MID.OGG ... OGG/OUTSIDE.MID.OGG
+   ```
+   (`LANG/ENGLISH.TXT` is optional — see [Localization](#localization).)
+4. For each file: if it already exists in internal storage, skip it. Otherwise open it via `AAssetManager_open(..., AASSET_MODE_STREAMING)` and stream-copy to the destination with a 64 KB buffer.
+5. Write a `.extracted` marker file when done. Subsequent launches short-circuit.
+
+### Path resolution
+
+The engine calls `android_get_data_path("SG.DL1")` instead of opening the asset directly. The function returns the full path in internal storage (e.g. `/data/data/su.viende.dividead/files/SG.DL1`), or `NULL` if the file isn't there yet.
+
+---
 
 ## Engine patches
 
+Derived from gameblabla/soywiz SDL 1.2 engine. Changes that adapt it for SDL2 + Android:
+
 | File | Patch |
 |------|-------|
-| `text.c` | `TTF_RenderUTF8_Shaded` + `TTF_SizeUTF8` |
-| `main.c` | `TTF_RenderUTF8_Shaded` + `SDL_main.h` + touch events |
-| `credit.c` | `TTF_RenderUTF8_Shaded` |
-| `platform.h` | `__ANDROID__` block + 640×480 + `HOME_DIRECTORY` |
+| `text.c` | `TTF_RenderText_Shaded` → `TTF_RenderUTF8_Shaded` (Cyrillic glyphs render correctly) |
+| `text.c` | `TTF_SizeText` → `TTF_SizeUTF8` |
+| `main.c` | `SDL_main` entry + Android event loop integration |
+| `main.c` | Touch event routing to `TOUCH_HANDLE_EVENT` |
+| `credit.c` | `TTF_RenderUTF8_Shaded` for the credits roll |
+| `platform.h` | `__ANDROID__` block: 640×480 fixed resolution + `HOME_DIRECTORY` + `GAME_HOME_DIRECTORY` |
 | `main.h` | Forward declaration for `text_at()` |
-| `sjis_table.c` | `#include <stdlib.h>` |
-| `touch_input.c` | **NEW** — touch gesture handling |
+| `main.h` | `LANGUAGE_DEFAULT "ENGLISH"` (multi-language menu removed) |
+| `sjis_table.c` | `#include <stdlib.h>` (missing on modern NDK) |
+| `sdl12_compat.h` | **new** — shim macros for SDL 1.2 API removed in SDL 2.0 |
+| `touch_input.c` | **new** — gesture detector |
+| `android_gl_render.c` | **new** — OpenGL ES 2.0 renderer |
+| `android_video.c` | **new** — JNI bridge to `MediaPlayer` |
+| `android_asset_extract.c` | **new** — first-launch unpacker |
+| `android_log.c` | **new** — redirects `stdout` / `stderr` to logcat |
+| `lz_decompress_arm.c` | **new** — ARM-optimized LZ77 decompressor |
+| `movie.c` | `MOVIE_PLAY` dispatches to `android_play_video()` on Android |
+| `menus.c` | Removed non-English entries from `main_menu_langs[]` (only ENGLISH.TXT is shipped) |
+
+### SDL 1.2 → 2.0 shim
+
+`sdl12_compat.h` provides macro aliases for SDL 1.2 API calls removed or renamed in SDL 2.0:
+
+- `SDL_GetKeyState` → `SDL_GetKeyboardState` + key-index translation
+- `SDL_VideoModeOK`, `SDL_SetVideoMode` → no-ops (use `SDL_CreateWindow`)
+- `SDL_WM_SetCaption`, `SDL_WM_GrabInput` → no-ops
+- `SDL_GetAppState` → synthesized from focus events
+
+The engine code keeps calling the old 1.2 names; the shim redirects them to the 2.0 equivalents.
+
+### LZ77 decompressor
+
+The original `vfs.c` decompressor processed one byte at a time with a `while` loop over the 8 control bits. The new `lz_decompress_arm.c` keeps the same LZ77 format (4096-byte ring buffer, initial write position 0xFEE, 12-bit position + 4-bit length+3 match encoding) but adds a fast path:
+
+```c
+if (len <= 8 &&
+    pos + len <= 0x1000 && rinp + len <= 0x1000 &&
+    dist >= len) {
+    // Batch copy — no wrap, no overlap
+    for (uint32_t i = 0; i < len; i++) {
+        output[i] = lz_ring[pos + i];
+        lz_ring[rinp + i] = lz_ring[pos + i];
+    }
+} else {
+    // Slow path — handle wrap and overlap
+    while (len--) { ... }
+}
+```
+
+The fast path covers ~80% of matches in typical scene data and skips the per-byte ring-index wrap check.
+
+---
+
+## Localization
+
+The engine's 12 UI strings (START, SAVE, LOAD, OPTIONS, EXIT, gallery-percentage format, screenshot label, etc.) are hardcoded as English defaults in `main.c`:
+
+```c
+char lang_texts[12][0x30] = {
+    "ENGLISH.DL1",
+    "START", "SAVE", "LOAD", "EXIT",
+    "%.1f%% GALLERY",
+    "SAVE IMAGE",
+    "Start new game?",
+    "OPTIONS",
+    "voice", "music", "No data"
+};
+```
+
+At startup, `lang_init()` tries to open `LANG/<LANGUAGE>.TXT` (where `LANGUAGE` defaults to `"ENGLISH"`). If the file is present, it overrides those 12 defaults line-by-line. If the file is missing, the engine keeps the C-source defaults — so the file is **optional**.
+
+The text-rendering pipeline is UTF-8 end to end (`TTF_SizeUTF8` for measurement, `TTF_RenderUTF8_Shaded` for rasterization), so dropping in a translated `LANG/ENGLISH.TXT` with Cyrillic content works without code changes. Use Unix line endings (`\n`, not `\r\n`); the engine strips `\r` but does not transcode encodings.
+
+In-game dialogue and script strings live inside `SG.DL1` as `.AB` files — not in `LANG/*.TXT`. Those need the tools in `tools/` to translate (see [Translation tools](#translation-tools)).
+
+The non-English entries (`JAPANESE`, `GERMAN`, `FRENCH`, `SPANISH`, `ITALIAN`) have been removed from the language menu in `menus.c`. The engine defaults to `LANGUAGE_DEFAULT "ENGLISH"` (defined in `main.h`), so `LANG/ENGLISH.TXT` is the only override file the engine will look for.
+
+To add another language: drop its `.TXT` into `assets/LANG/`, add the language name back to the `main_menu_langs[]` table in `menus.c`, and set `LANGUAGE_DEFAULT` in `main.h` to that name.
+
+---
+
+## Build requirements
+
+| Component | Version |
+|-----------|---------|
+| Android Studio | Narwhal 2025.1.1+ (or JDK 17 + SDK + NDK on CLI) |
+| JDK | 17 |
+| Android Gradle Plugin | 8.7.2 (declared in `app/build.gradle`) |
+| Gradle | 8.11.1 (wrapper included) |
+| Android NDK | r25 or newer (tested with r27) |
+| CMake | 3.22.1+ (bundled with Android SDK) |
+| `compileSdk` / `targetSdk` | 35 |
+| `minSdk` | 24 |
+
+**Why minSdk 24?** The 32-bit `armeabi-v7a` build uses `ftello` / `fseeko` for the streaming ring buffer in `ringread.c`. These functions are only available in bionic libc starting from API level 24.
+
+### ABIs
+
+- `arm64-v8a` — primary target, modern 64-bit devices
+- `armeabi-v7a` — legacy 32-bit devices (Android 7.0+)
+
+x86 and x86-64 are not supported.
+
+---
 
 ## Translation tools
 
-In `tools/`:
-- `ab_translator.py` — extract/verify/patch `.AB` script files
-- `repack_sg.py` — repack patched `.AB` back into `SG.DL1`
+For in-game dialogue and script strings (which live inside `SG.DL1` as `.AB` files, not in `LANG/*.TXT`), the project ships two Python helpers in `tools/`:
 
 ```bash
+# Extract strings from a .AB script file
 python tools/ab_translator.py extract AASTART.AB -o aastart.patch
-# Edit aastart.patch — fill in translations after >
+
+# Edit aastart.patch — fill in Russian translations after each > line
+
+# Patch the .AB file with the translated strings
 python tools/ab_translator.py patch AASTART.AB aastart.patch -o AASTART.RU.AB
+
+# Repack the patched .AB back into SG.DL1
 python tools/repack_sg.py SG.DL1 AASTART.AB AASTART.RU.AB -o SG.RU.DL1
 ```
+
+Both scripts are pure Python 3 with no third-party dependencies.
+
+---
 
 ## Troubleshooting
 
 ### "SDL2 not found!" CMake error
-This should not happen anymore — CMake downloads SDL2 automatically.
-If you see this error, make sure you have network access during the
-configure step. CMake caches the download in `~/.gradle/cxx/`.
+
+Should not happen — CMake `FetchContent` downloads SDL2 automatically. If you see this:
+
+- Verify network access during the configure step.
+- Check `~/.gradle/cxx/` — the cached download lives here.
+- Manually clone the SDL2 stack as a fallback:
+  ```bash
+  cd app/jni
+  mkdir -p SDL && cd SDL
+  git clone --branch SDL2 https://github.com/libsdl-org/SDL.git
+  git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
+  git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
+  git clone --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
+  ```
 
 ### Gradle sync fails
-Make sure you're using Gradle 8.11 (the wrapper handles this).
-If Android Studio prompts to upgrade AGP, accept.
 
-### CMake FetchContent download fails
-If the download fails (network issues), you can manually clone SDL2:
-```bash
-cd app/jni
-mkdir -p SDL && cd SDL
-git clone --branch SDL2 https://github.com/libsdl-org/SDL.git
-git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
-git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
-git clone --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
-```
-Then CMake will use the local copies instead of downloading.
+- Confirm Gradle 8.11.1 (the wrapper enforces this — `./gradlew --version`).
+- If Android Studio offers to upgrade AGP, accept.
+- If you see duplicate Kotlin stdlib class errors, the `constraints` and `resolutionStrategy` blocks in `app/build.gradle` already force Kotlin 1.8.22 — don't remove them.
 
 ### App crashes on launch
-Check logcat: `adb logcat -s SDL DiviDead`
-Common issues:
-- Missing `SG.DL1` or `WV.DL1` in assets/
-- Out of memory (WV.DL1 is 315 MB; `largeHeap=true` is set)
 
-## License
+```bash
+adb logcat -s SDL DiviDead
+```
 
-Engine: gameblabla's fork of soywiz's Divi-Dead interpreter.
-SDL2: zlib license.
-For personal use only.
+Common causes:
+
+- **Missing assets** — `SG.DL1` or `WV.DL1` not in `app/src/main/assets/`. Re-run `./populate_assets.sh`.
+- **Out of memory** — `WV.DL1` is 315 MB and gets unpacked to internal storage on first launch. `largeHeap="true"` is set in the manifest; if the device still OOMs, free up internal storage and retry.
+- **GL context creation failed** — look for `"GL: context failed"` in logcat. Usually means the device's OpenGL ES 2.0 driver is broken.
+
+### First launch takes a long time
+
+Normal — the app is unpacking ~430 MB of assets from the APK into internal storage. Subsequent launches are fast (the `.extracted` marker short-circuits the unpacker).
+
+### Russian text renders as boxes
+
+Make sure your translated `LANG/ENGLISH.TXT` is encoded as UTF-8 (not Windows-1251) and uses Unix line endings (`\n`, not `\r\n`). The engine strips `\r` from the end of each line but doesn't transcode encodings.
+
+---
+
+## Credits & license
+
+- **Engine source:** gameblabla's fork of soywiz's Divi-Dead interpreter — released for personal use only.
+- **SDL2, SDL_image, SDL_mixer, SDL_ttf:** zlib license.
+- **Android port:** © VienDesu! Porting Team.
+
+This project is for **personal use only**. The original Divi-Dead game data (`SG.DL1`, `WV.DL1`, videos, music) is copyrighted by Leaf/AQUAPLUS and is **not** included in this repository — you must supply your own legally-obtained copy.
+
+The repository contains only the engine source code (with the patches and new modules described above), the build system, translation tooling, and launcher icons. No game assets, no copyrighted dialogue, no copyrighted artwork.
