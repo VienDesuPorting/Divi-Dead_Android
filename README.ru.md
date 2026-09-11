@@ -186,32 +186,7 @@ Swizzle `.bgra` во фрагментном шейдере нужен, пото�
 
 PC-версия Divi-Dead использует `.MPG` (MPEG-1) и `.AVI` видео для вступления и некоторых катсцен. Оригинальный движок использовал SMPEG и Dreamcast ROQ-декодер — оба удалены из этого порта. Android-версия использует нативный `MediaPlayer` API Android.
 
-### Пайплайн
-
-```
-Движок (C)                         Java (DiviDeadActivity)              Android
-──────────                         ───────────────────────              ───────
-MOVIE_PLAY(path, skip)
-  └─→ android_play_video()         playVideo(path, skipAllowed)
-        └─→ JNI CallIntMethod ────→  runOnUiThread { создать SurfaceView,
-                                                 прикрепить к активити,
-                                                 MediaPlayer.setDataSource(path),
-                                                 setDisplay(surfaceHolder),
-                                                 prepare(), start() }
-                                                 │
-                                                 ↓
-                                            SurfaceFlinger compositor
-                                                 │
-                                                 ↓
-                                            Аппаратный видеодекодер
-                                                 │
-                                                 ↓
-                                            SurfaceView рендерит
-                                                 │
-            ждать флаг videoPlaying ←── listener завершения
-            удалить SurfaceView + MediaPlayer
-            вернуть 1 / 2 / 0
-```
+Движок вызывает `MOVIE_PLAY(path, skip)` в C. `android_video.c` пробрасывает вызов в Java через JNI, вызывая `DiviDeadActivity.playVideo(path, skipAllowed)`. Java-метод создаёт `SurfaceView`, прикрепляет его к активити, настраивает `MediaPlayer` с путём к файлу и запускает воспроизведение. Аппаратное декодирование идёт через стандартный пайплайн Android (SurfaceFlinger → кодек). Когда воспроизведение завершается или пользователь тапает для пропуска, Java-сторона уничтожает `SurfaceView` и `MediaPlayer` и возвращает `1` (завершено), `2` (пропущено) или `0` (ошибка).
 
 ### Коды возврата
 

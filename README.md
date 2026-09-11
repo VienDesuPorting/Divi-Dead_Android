@@ -186,32 +186,7 @@ For dirty-rect updates during scene transitions, `android_gl_render_rect()` uplo
 
 Divi-Dead's PC version uses `.MPG` (MPEG-1) and `.AVI` video for the opening and certain cutscenes. The original engine had SMPEG and a Dreamcast ROQ decoder — both removed from this port. The Android version uses Android's `MediaPlayer` API instead.
 
-### Pipeline
-
-```
-Engine (C)                          Java (DiviDeadActivity)             Android
-──────────                          ───────────────────────             ───────
-MOVIE_PLAY(path, skip)
-  └─→ android_play_video()           playVideo(path, skipAllowed)
-        └─→ JNI CallIntMethod ─────→  runOnUiThread { create SurfaceView,
-                                                 attach to activity,
-                                                 MediaPlayer.setDataSource(path),
-                                                 setDisplay(surfaceHolder),
-                                                 prepare(), start() }
-                                                 │
-                                                 ↓
-                                            SurfaceFlinger compositor
-                                                 │
-                                                 ↓
-                                            Hardware video decoder
-                                                 │
-                                                 ↓
-                                            SurfaceView renders
-                                                 │
-            wait on videoPlaying flag ←── completion listener
-            cleanup SurfaceView + MediaPlayer
-            return 1 / 2 / 0
-```
+The engine calls `MOVIE_PLAY(path, skip)` in C. `android_video.c` bridges this to the Java side via JNI, calling `DiviDeadActivity.playVideo(path, skipAllowed)`. The Java method creates a `SurfaceView`, attaches it to the activity, sets up a `MediaPlayer` with the file path, and starts playback. Hardware decoding goes through Android's standard pipeline (SurfaceFlinger → codec). When playback completes or the user taps to skip, the Java side cleans up the `SurfaceView` and `MediaPlayer`, and returns `1` (completed), `2` (skipped), or `0` (failed).
 
 ### Return codes
 
