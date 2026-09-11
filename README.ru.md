@@ -152,7 +152,7 @@ Divi-dead_android/
 
 ## Рендеринг
 
-Порт полностью обходит `SDL_Renderer`. `SDL_Renderer` ненадёжно работает на Android с OpenGL ES-бэкендом на GPU разных вендоров (Adreno, Mali, PowerVR), поэтому вместо него используется сырый OpenGL ES 2.0 через `SDL_GL_*`.
+Порт полностью обходит `SDL_Renderer`. `SDL_Renderer` ненадёжно работает на Android с OpenGL ES-бэкендом на GPU разных вендоров (Adreno, Mali, PowerVR), поэтому вместо него используется сырой OpenGL ES 2.0 через `SDL_GL_*`.
 
 **Файл:** `app/jni/src/src/android_gl_render.c`
 
