@@ -62,15 +62,39 @@ extern void android_gl_render(SDL_Window *window, SDL_Surface *surface);
 
 /* ---------- Video callback ---------- */
 
+/* Convert a pl_mpeg YUV frame to the engine's screen surface format.
+ *
+ * plm_frame_to_rgba() outputs RGBA8888 (R,G,B,A bytes in memory).
+ * The screen surface is SDL_PIXELFORMAT_RGBX8888 on Android (R,G,B,X
+ * bytes — X is padding, ignored). SDL_BlitScaled between these two
+ * formats silently fails on some Android SDL2 builds, so we do the
+ * conversion ourselves: blit RGBA into a same-format temp surface,
+ * then SDL_BlitScaled (which is a memcpy since formats match).
+ *
+ * Actually, even simpler: skip the temp surface, write directly into
+ * screen->pixels with a manual RGBA→RGBX byte-loop. This avoids the
+ * SDL_BlitScaled quirks entirely.
+ */
+
 static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
     (void)plm; (void)user;
     g_video_frames_decoded++;
 
-    /* YUV -> RGBA in place */
+    /* YUV -> RGBA into g_frame_rgba (4 bytes per pixel) */
     plm_frame_to_rgba(frame, g_frame_rgba, g_video_width * 4);
 
-    /* Wrap RGBA buffer in a throwaway SDL_Surface (no pixel copy,
-     * just a header that points at g_frame_rgba) */
+    if (!screen || !screen->pixels || !g_sdl_window) {
+        LOGE("video_decode_cb: missing state (screen=%p pixels=%p window=%p)\n",
+             (void*)screen, screen ? (void*)screen->pixels : NULL, (void*)g_sdl_window);
+        return;
+    }
+
+    /* Stretch-blit into the engine's 640x480 screen surface.
+     *
+     * SDL_BlitScaled between RGBA32 (source) and RGBX8888 (screen)
+     * silently produces black on Android SDL2 — so we use SDL's
+     * SDL_ConvertSurface to get a same-format copy first, then
+     * SDL_BlitScaled becomes a memcpy. */
     SDL_Surface *video_surf = SDL_CreateRGBSurfaceWithFormatFrom(
         g_frame_rgba,
         g_video_width, g_video_height, 32,
@@ -81,35 +105,24 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
         return;
     }
 
-    /* Stretch-blit into the engine's 640x480 screen surface, then
-     * upload to the GL texture. SDL_FillRect clears any letterbox
-     * regions to black (g_video_* may be smaller than 640x480). */
-    if (!screen) {
-        LOGE("video_decode_cb: screen is NULL\n");
-        SDL_FreeSurface(video_surf);
-        return;
-    }
-    if (!screen->pixels) {
-        LOGE("video_decode_cb: screen->pixels is NULL\n");
-        SDL_FreeSurface(video_surf);
-        return;
-    }
-    if (!g_sdl_window) {
-        LOGE("video_decode_cb: g_sdl_window is NULL\n");
-        SDL_FreeSurface(video_surf);
+    /* Convert to screen's format. This is the key step — after this,
+     * SDL_BlitScaled is a same-format fast copy. */
+    SDL_Surface *converted = SDL_ConvertSurfaceFormat(video_surf, screen->format->format, 0);
+    SDL_FreeSurface(video_surf);
+    if (!converted) {
+        LOGE("video_decode_cb: SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
         return;
     }
 
     SDL_FillRect(screen, NULL, 0);
     SDL_Rect dst = {0, 0, screen->w, screen->h};
-    int blit_ok = SDL_BlitScaled(video_surf, NULL, screen, &dst);
+    int blit_ok = SDL_BlitScaled(converted, NULL, screen, &dst);
     if (blit_ok < 0) {
         LOGE("video_decode_cb: SDL_BlitScaled failed: %s\n", SDL_GetError());
     }
-    SDL_FreeSurface(video_surf);
+    SDL_FreeSurface(converted);
 
-    /* Log the first few frames to verify the callback is being called
-     * and that the screen surface actually got non-black pixels. */
+    /* Log the first few frames to verify the blit actually wrote pixels. */
     if (g_video_frames_decoded <= 3) {
         Uint32 *px = (Uint32 *)screen->pixels;
         Uint32 top_left = px[0];
