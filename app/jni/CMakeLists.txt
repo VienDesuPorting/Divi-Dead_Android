@@ -21,20 +21,69 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL)
 
 # SDL_image
+# Disable all optional image formats to avoid cloning heavy submodules
+# (libjxl, dav1d, libavif, libtiff, libwebp, etc.). We only need JPG
+# (for splash) and PNG (for icons/credits). The submodule clone of
+# libjxl → zlib was failing intermittently with TLS errors on GitHub.
+set(SDLIMAGE_AVIF  OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_JXL   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_TIF   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_WEBP  OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_JPG   ON  CACHE BOOL "" FORCE)
+set(SDLIMAGE_PNG   ON  CACHE BOOL "" FORCE)
+set(SDLIMAGE_BMP   ON  CACHE BOOL "" FORCE)
+set(SDLIMAGE_GIF   ON  CACHE BOOL "" FORCE)
+set(SDLIMAGE_LBM   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_PCX   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_PNM   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_TGA   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_XCF   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_XPM   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_XV    OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_QOI   OFF CACHE BOOL "" FORCE)
+# Build SDL_image as a static library (no .so to package)
+set(SDLIMAGE_INSTALL OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_TESTS   OFF CACHE BOOL "" FORCE)
+set(SDLIMAGE_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
     SDL_image
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
     GIT_TAG release-2.8.x
     GIT_SHALLOW TRUE
+    # Only clone the submodules we actually need for JPG/PNG support.
+    # Skipping libjxl/dav1d/libavif/libtiff/libwebp avoids the TLS errors
+    # we were hitting on madler/zlib (pulled in transitively by libjxl).
+    GIT_SUBMODULES "external/jpeg" "external/libpng" "external/zlib"
 )
 FetchContent_MakeAvailable(SDL_image)
 
 # SDL_mixer
+# Only OGG Vorbis is needed for music. Disable all other codecs to
+# avoid cloning heavy submodules (libmodplug, libxmp, opusfile, flac,
+# mpg123, fluidsynth, etc.).
+set(SDL_MIXER_OPUS      OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_MOD       OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_MIDI      OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_FLAC      OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_MP3       OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_WAV       ON  CACHE BOOL "" FORCE)
+set(SDL_MIXER_OGG       ON  CACHE BOOL "" FORCE)
+set(SDL_MIXER_VORBIS    ON  CACHE BOOL "" FORCE)  # libvorbis (vendored)
+set(SDL_MIXER_VORBIS_TREMOR OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_INSTALL   OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_TESTS     OFF CACHE BOOL "" FORCE)
+set(SDL_MIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
     SDL_mixer
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
     GIT_TAG release-2.8.x
     GIT_SHALLOW TRUE
+    # Only clone what's needed for OGG Vorbis playback. Skip the rest
+    # (mpg123, opusfile, libmodplug, libxmp, flac, fluidsynth) — they
+    # were causing TLS errors during submodule clone.
+    GIT_SUBMODULES "external/ogg" "external/vorbis"
 )
 FetchContent_MakeAvailable(SDL_mixer)
 
