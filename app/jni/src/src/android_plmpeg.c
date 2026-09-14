@@ -53,6 +53,7 @@ static SDL_AudioDeviceID g_audio_dev = 0;
 static uint8_t *g_frame_rgba = NULL;
 static int g_video_width = 0;
 static int g_video_height = 0;
+static int g_video_frames_decoded = 0;
 
 /* Forward decls — android_gl_render is in android_gl_render.c,
  * g_sdl_window is declared in sdl12_compat.h (and defined in main.c),
@@ -63,6 +64,7 @@ extern void android_gl_render(SDL_Window *window, SDL_Surface *surface);
 
 static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
     (void)plm; (void)user;
+    g_video_frames_decoded++;
 
     /* YUV -> RGBA in place */
     plm_frame_to_rgba(frame, g_frame_rgba, g_video_width * 4);
@@ -82,10 +84,41 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
     /* Stretch-blit into the engine's 640x480 screen surface, then
      * upload to the GL texture. SDL_FillRect clears any letterbox
      * regions to black (g_video_* may be smaller than 640x480). */
+    if (!screen) {
+        LOGE("video_decode_cb: screen is NULL\n");
+        SDL_FreeSurface(video_surf);
+        return;
+    }
+    if (!screen->pixels) {
+        LOGE("video_decode_cb: screen->pixels is NULL\n");
+        SDL_FreeSurface(video_surf);
+        return;
+    }
+    if (!g_sdl_window) {
+        LOGE("video_decode_cb: g_sdl_window is NULL\n");
+        SDL_FreeSurface(video_surf);
+        return;
+    }
+
     SDL_FillRect(screen, NULL, 0);
     SDL_Rect dst = {0, 0, screen->w, screen->h};
-    SDL_BlitScaled(video_surf, NULL, screen, &dst);
+    int blit_ok = SDL_BlitScaled(video_surf, NULL, screen, &dst);
+    if (blit_ok < 0) {
+        LOGE("video_decode_cb: SDL_BlitScaled failed: %s\n", SDL_GetError());
+    }
     SDL_FreeSurface(video_surf);
+
+    /* Log the first few frames to verify the callback is being called
+     * and that the screen surface actually got non-black pixels. */
+    if (g_video_frames_decoded <= 3) {
+        Uint32 *px = (Uint32 *)screen->pixels;
+        Uint32 top_left = px[0];
+        Uint32 center = px[(screen->w * screen->h) / 2];
+        LOGI("video_decode_cb: frame %d, screen %dx%d (pitch=%d, fmt=0x%x), "
+             "top_left=0x%08x center=0x%08x\n",
+             g_video_frames_decoded, screen->w, screen->h, screen->pitch,
+             screen->format->format, top_left, center);
+    }
 
     android_gl_render(g_sdl_window, screen);
 }
@@ -165,8 +198,13 @@ int android_play_video(const char *path, int skip) {
     int sample_rate = plm_get_samplerate(plm);
     double framerate = plm_get_framerate(plm);
     int has_audio = plm_get_audio_enabled(plm);
-    LOGI("video %dx%d @ %.2ffps, audio %d Hz (enabled=%d)\n",
-         g_video_width, g_video_height, framerate, sample_rate, has_audio);
+    int has_video = plm_get_video_enabled(plm);
+    LOGI("video %dx%d @ %.2ffps (enabled=%d), audio %d Hz (enabled=%d)\n",
+         g_video_width, g_video_height, framerate, has_video, sample_rate, has_audio);
+
+    if (!has_video) {
+        LOGE("video stream is disabled — no frames will be decoded\n");
+    }
 
     g_frame_rgba = (uint8_t *)malloc(g_video_width * g_video_height * 4);
     if (!g_frame_rgba) {
@@ -243,7 +281,9 @@ done:
     atomic_store(&audio_read_pos, 0);
     atomic_store(&audio_write_pos, 0);
 
-    LOGI("done (skipped=%d)\n", skipped);
+    LOGI("done (skipped=%d, video_frames_decoded=%d)\n",
+         skipped, g_video_frames_decoded);
+    g_video_frames_decoded = 0;
     return skipped ? 2 : 1;
 }
 
