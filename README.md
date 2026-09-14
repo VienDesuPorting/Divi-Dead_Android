@@ -250,9 +250,16 @@ This port uses [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — a pure C MPEG
 pl_mpeg decodes **MPEG-1 Program Stream** containers only (`.mpg` / `.mpeg`). It does not support AVI, MP4, MKV, or any other container.
 
 - `CS_ROGO.MPG` — already MPEG-1 in the PC release, used as-is.
-- `OPEN.AVI` — must be converted to `OPEN.MPG` before building. `populate_assets.sh` does this automatically if `ffmpeg` is installed:
+- `OPEN.AVI` — must be converted to `OPEN.MPG` before building. The original is 480×264 @ 15 fps with mono 22050 Hz PCM audio, both of which are outside what MPEG-1/MP2 accept:
+  - **15 fps** is not in the MPEG-1 framerate table — force 30 fps (duplicates frames, motion still looks smooth because source is slow).
+  - **MP2 at 22050 Hz mono** doesn't allow 192 kbps — upsample audio to 44100 Hz stereo.
+
+  `populate_assets.sh` does this automatically if `ffmpeg` is installed:
   ```bash
-  ffmpeg -i OPEN.AVI -c:v mpeg1video -q:v 4 -c:a mp2 -b:a 192k OPEN.MPG
+  ffmpeg -i OPEN.AVI -r 30 \
+      -c:v mpeg1video -q:v 4 \
+      -c:a mp2 -b:a 192k -ar 44100 -ac 2 \
+      OPEN.MPG
   ```
 
 If you skip the conversion, the opening video will not play — the engine logs `OPEN.MPG not found or playback failed` and continues to the title screen.

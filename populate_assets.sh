@@ -36,20 +36,27 @@ fi
 
 # OPEN.MPG — if PC version shipped OPEN.MPG, copy directly.
 # Else convert OPEN.AVI to MPEG-1 (pl_mpeg only supports MPEG-PS).
+#
+# The original OPEN.AVI is 480x264 @ 15 fps with mono 22050 Hz PCM audio.
+# Two things to fix during conversion:
+#  - MPEG-1 doesn't support 15 fps → force 30 fps (-r 30, duplicates frames)
+#  - MP2 at 22050 Hz mono doesn't allow 192 kbps → upsample to 44100 Hz stereo
 if [ -f "$SRC/OPEN.MPG" ]; then
     cp "$SRC/OPEN.MPG" "$DEST/" && echo "  [OK] OPEN.MPG"
 elif [ -f "$SRC/OPEN.AVI" ]; then
     if command -v ffmpeg >/dev/null 2>&1; then
         echo "  Converting OPEN.AVI → OPEN.MPG (MPEG-1 + MP2)..."
         ffmpeg -y -i "$SRC/OPEN.AVI" \
+            -r 30 \
             -c:v mpeg1video -q:v 4 \
-            -c:a mp2 -b:a 192k \
+            -c:a mp2 -b:a 192k -ar 44100 -ac 2 \
             "$DEST/OPEN.MPG" < /dev/null
         echo "  [OK] OPEN.MPG (converted from AVI)"
     else
         echo "  [WARN] ffmpeg not found — OPEN.AVI not converted."
         echo "         Install ffmpeg and re-run, or convert manually:"
-        echo "         ffmpeg -i OPEN.AVI -c:v mpeg1video -q:v 4 -c:a mp2 -b:a 192k OPEN.MPG"
+        echo "         ffmpeg -i OPEN.AVI -r 30 -c:v mpeg1video -q:v 4 \\"
+        echo "                -c:a mp2 -b:a 192k -ar 44100 -ac 2 OPEN.MPG"
         cp "$SRC/OPEN.AVI" "$DEST/" 2>/dev/null || true
     fi
 fi
