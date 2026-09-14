@@ -53,7 +53,6 @@ static SDL_AudioDeviceID g_audio_dev = 0;
 static uint8_t *g_frame_rgba = NULL;
 static int g_video_width = 0;
 static int g_video_height = 0;
-static int g_video_frames_decoded = 0;
 
 /* Forward decls — android_gl_render is in android_gl_render.c,
  * g_sdl_window is declared in sdl12_compat.h (and defined in main.c),
@@ -67,18 +66,13 @@ extern void android_gl_render(SDL_Window *window, SDL_Surface *surface);
  * plm_frame_to_rgba() outputs RGBA8888 (R,G,B,A bytes in memory).
  * The screen surface is SDL_PIXELFORMAT_RGBX8888 on Android (R,G,B,X
  * bytes — X is padding, ignored). SDL_BlitScaled between these two
- * formats silently fails on some Android SDL2 builds, so we do the
- * conversion ourselves: blit RGBA into a same-format temp surface,
- * then SDL_BlitScaled (which is a memcpy since formats match).
- *
- * Actually, even simpler: skip the temp surface, write directly into
- * screen->pixels with a manual RGBA→RGBX byte-loop. This avoids the
- * SDL_BlitScaled quirks entirely.
+ * formats silently fails on Android SDL2 builds (the stretch-blitter
+ * has known issues with cross-format scaling on ARM), so we explicitly
+ * convert the video surface to the screen's format first.
  */
 
 static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
     (void)plm; (void)user;
-    g_video_frames_decoded++;
 
     /* YUV -> RGBA into g_frame_rgba (4 bytes per pixel) */
     plm_frame_to_rgba(frame, g_frame_rgba, g_video_width * 4);
@@ -89,12 +83,9 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
         return;
     }
 
-    /* Stretch-blit into the engine's 640x480 screen surface.
-     *
-     * SDL_BlitScaled between RGBA32 (source) and RGBX8888 (screen)
-     * silently produces black on Android SDL2 — so we use SDL's
-     * SDL_ConvertSurface to get a same-format copy first, then
-     * SDL_BlitScaled becomes a memcpy. */
+    /* Wrap the RGBA buffer in a throwaway surface, then convert to the
+     * screen's pixel format. After conversion, SDL_BlitScaled degenerates
+     * to a same-format stretch copy (memcpy + nearest-neighbor scale). */
     SDL_Surface *video_surf = SDL_CreateRGBSurfaceWithFormatFrom(
         g_frame_rgba,
         g_video_width, g_video_height, 32,
@@ -105,8 +96,6 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
         return;
     }
 
-    /* Convert to screen's format. This is the key step — after this,
-     * SDL_BlitScaled is a same-format fast copy. */
     SDL_Surface *converted = SDL_ConvertSurfaceFormat(video_surf, screen->format->format, 0);
     SDL_FreeSurface(video_surf);
     if (!converted) {
@@ -116,22 +105,10 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
 
     SDL_FillRect(screen, NULL, 0);
     SDL_Rect dst = {0, 0, screen->w, screen->h};
-    int blit_ok = SDL_BlitScaled(converted, NULL, screen, &dst);
-    if (blit_ok < 0) {
+    if (SDL_BlitScaled(converted, NULL, screen, &dst) < 0) {
         LOGE("video_decode_cb: SDL_BlitScaled failed: %s\n", SDL_GetError());
     }
     SDL_FreeSurface(converted);
-
-    /* Log the first few frames to verify the blit actually wrote pixels. */
-    if (g_video_frames_decoded <= 3) {
-        Uint32 *px = (Uint32 *)screen->pixels;
-        Uint32 top_left = px[0];
-        Uint32 center = px[(screen->w * screen->h) / 2];
-        LOGI("video_decode_cb: frame %d, screen %dx%d (pitch=%d, fmt=0x%x), "
-             "top_left=0x%08x center=0x%08x\n",
-             g_video_frames_decoded, screen->w, screen->h, screen->pitch,
-             screen->format->format, top_left, center);
-    }
 
     android_gl_render(g_sdl_window, screen);
 }
@@ -294,9 +271,7 @@ done:
     atomic_store(&audio_read_pos, 0);
     atomic_store(&audio_write_pos, 0);
 
-    LOGI("done (skipped=%d, video_frames_decoded=%d)\n",
-         skipped, g_video_frames_decoded);
-    g_video_frames_decoded = 0;
+    LOGI("done (skipped=%d)\n", skipped);
     return skipped ? 2 : 1;
 }
 
