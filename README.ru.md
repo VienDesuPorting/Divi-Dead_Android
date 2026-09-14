@@ -1,6 +1,6 @@
 # Divi-Dead — Порт на Android
 
-Нативный порт визуальной новеллы **Divi-Dead** (Leaf, 1998) на Android. Поверх SDL2 с GPU-рендерером на OpenGL ES 2.0, нативным `MediaPlayer` для видео и собственной системой сенсорных жестов. UI-строки движка зашиты в C как английские дефолты; позже их можно переопределить файлом перевода (`LANG/*.TXT`).
+Нативный порт визуальной новеллы **Divi-Dead** (Leaf, 1998) на Android. Поверх SDL2 с GPU-рендерером на OpenGL ES 2.0, собственным MPEG-1 видеоплеером на pl_mpeg и собственной системой сенсорных жестов. UI-строки движка зашиты в C как английские дефолты; позже их можно переопределить файлом перевода (`LANG/*.TXT`).
 
 - **minSdk 24**, **targetSdk 35**
 - ABI: `arm64-v8a`, `armeabi-v7a`
@@ -33,7 +33,7 @@
 | Компонент | Подход |
 |-----------|--------|
 | Окно / GL-контекст | `SDL_GL_CreateContext` + OpenGL ES 2.0 |
-| Видео | Android `MediaPlayer` (Java) |
+| Видео | pl_mpeg (чистый C, MPEG-1 + MP2) |
 | Сенсорный ввод | Собственный детектор жестов → SDL-события клавиш |
 | Аудио | `SDL_mixer` (OGG Vorbis) |
 | Шрифты | `SDL_ttf` с `TTF_RenderUTF8_Shaded` |
@@ -58,7 +58,7 @@ cd Divi-dead_android
 ./populate_assets.sh /путь/к/dividead-pc
 ```
 
-Скопирует `SG.DL1`, `WV.DL1`, `OGG/*.OGG` и `CS_ROGO.MPG` в `app/src/main/assets/`. (Скрипт также пытается скопировать `LANG/ENGLISH.TXT`, если он есть — но файл опциональный, см. [Локализация](#локализация).)
+Скопирует `SG.DL1`, `WV.DL1`, `OGG/*.OGG` и `CS_ROGO.MPG` в `app/src/main/assets/`. Если есть `OPEN.AVI` и установлен `ffmpeg`, скрипт также конвертирует его в `OPEN.MPG` (MPEG-1) — см. [Воспроизведение видео](#воспроизведение-видео). Скрипт также пытается скопировать `LANG/ENGLISH.TXT`, если он есть — но файл опциональный, см. [Локализация](#локализация).
 
 #### Музыка: конвертация MIDI → OGG
 
@@ -122,7 +122,7 @@ Divi-dead_android/
 │   │       │   ├── audio.c                   # Музыка / SFX / озвучка
 │   │       │   ├── touch_input.c             # Детектор сенсорных жестов
 │   │       │   ├── android_gl_render.c       # Рендерер OpenGL ES 2.0
-│   │       │   ├── android_video.c           # JNI-мост к MediaPlayer
+│   │       │   ├── android_plmpeg.c           # MPEG-1 видеоплеер (pl_mpeg + SDL_Audio)
 │   │       │   ├── android_asset_extract.c   # Распаковщик ассетов при первом запуске
 │   │       │   ├── android_log.c             # stdout/stderr → logcat
 │   │       │   ├── lz_decompress_arm.c       # Оптимизированный под ARM LZ77
@@ -213,9 +213,29 @@ Swizzle `.bgra` во фрагментном шейдере нужен, пото�
 
 ## Воспроизведение видео
 
-PC-версия Divi-Dead использует `.MPG` (MPEG-1) и `.AVI` видео для вступления и некоторых катсцен. Оригинальный движок использовал SMPEG и Dreamcast ROQ-декодер — оба удалены из этого порта. Android-версия использует нативный `MediaPlayer` API Android.
+PC-версия Divi-Dead поставляется с двумя роликами: `CS_ROGO.MPG` (MPEG-1, логотип студии) и `OPEN.AVI` (вступительная катсцена).
 
-Движок вызывает `MOVIE_PLAY(path, skip)` в C. `android_video.c` пробрасывает вызов в Java через JNI, вызывая `DiviDeadActivity.playVideo(path, skipAllowed)`. Java-метод создаёт `SurfaceView`, прикрепляет его к активити, настраивает `MediaPlayer` с путём к файлу и запускает воспроизведение. Аппаратное декодирование идёт через стандартный пайплайн Android (SurfaceFlinger → кодек). Когда воспроизведение завершается или пользователь тапает для пропуска, Java-сторона уничтожает `SurfaceView` и `MediaPlayer` и возвращает `1` (завершено), `2` (пропущено) или `0` (ошибка).
+Оригинальный движок поддерживал три видеобекенда — SMPEG (C++), Dreamcast ROQ и мост к Java `MediaPlayer` — все они имели проблемы на Android. SMPEG и ROQ были удалены из порта ещё на раннем этапе. Подход с Java `MediaPlayer` оказался ненадёжным между устройствами: на некоторых SoC (например, Nothing Phone 3A с Adreno) `MediaPlayer.prepare()` падает с `error (1, -2147483648)` для MPEG-1, а на Motorola Moto G60s видео просто не воспроизводится.
+
+Этот порт использует [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — чистый C-декодер MPEG-1 видео + MP2 аудио, без платформенных зависимостей. Работает одинаково на всех Android-устройствах, потому что декодирование полностью происходит в процессе приложения.
+
+**Файлы:**
+- `app/jni/src/src/plmpeg/pl_mpeg.h` — библиотека pl_mpeg (header-only, MIT-лицензия)
+- `app/jni/src/src/android_plmpeg.c` — реализация `android_play_video()`
+- `app/jni/src/src/movie.c` — диспетчер `MOVIE_PLAY()`
+
+### Как это работает
+
+`android_play_video(path, skip)` в `android_plmpeg.c`:
+
+1. Открывает файл через `plm_create_with_filename()`.
+2. Выделяет RGBA-буфер под нативные размеры видео.
+3. Устанавливает видео- и аудиоколбэки на инстанс pl_mpeg.
+4. Открывает `SDL_AudioDevice` на частоте файла (обычно 44100 Гц, стерео, S16).
+5. Входит в цикл вызовов `plm_decode(plm, delta_time)` с wall-clock дельтами. pl_mpeg сам решает, какие видеокадры и аудиочанки отдать, и вызывает колбэки.
+6. **Видеоколбэк** — `plm_frame_to_rgba()` конвертирует плоскости Y/Cb/Cr в RGBA на CPU, оборачивает буфер во временный `SDL_Surface` и stretch-blit-ит в экранную поверхность движка 640×480. Затем экран загружается в GL-текстуру через `android_gl_render()`.
+7. **Аудиоколбэк** — pl_mpeg отдаёт 1152-семпловые float-кадры (interleaved L/R, диапазон −1.0…1.0). Они добавляются в lock-free ring buffer. Колбэк SDL_Audio читает из кольца, конвертирует float → S16 (`sample * 32767`) и копирует в поток SDL.
+8. **Тап-пропуск** — между шагами декодирования вызывается `SDL_PollEvent()`. Событие `FINGERUP`, `MOUSEBUTTONUP` или `KEYDOWN` (когда `skip=1`) прерывает цикл, и функция возвращает `2`.
 
 ### Коды возврата
 
@@ -223,20 +243,19 @@ PC-версия Divi-Dead использует `.MPG` (MPEG-1) и `.AVI` вид�
 |----------|---------|
 | `1` | Видео воспроизведено до конца |
 | `2` | Пользователь пропустил тапом |
-| `0` | Воспроизведение не удалось (нет файла, ошибка декодера и т.д.) |
+| `0` | Воспроизведение не удалось (нет файла, ошибка декодера) |
 
-### Соотношение сторон
+### Ограничения формата
 
-`SurfaceView` меняет размер под нативные размеры видео (`onVideoSizeChanged` listener), отмасштабированные так, чтобы вписаться в экран с сохранением соотношения сторон. Видео никогда не растягивается.
+pl_mpeg декодирует **только MPEG-1 Program Stream** контейнеры (`.mpg` / `.mpeg`). AVI, MP4, MKV и другие контейнеры не поддерживаются.
 
-### Тап-пропуск
+- `CS_ROGO.MPG` — уже MPEG-1 в PC-релизе, используется как есть.
+- `OPEN.AVI` — нужно сконвертировать в `OPEN.MPG` перед сборкой. `populate_assets.sh` делает это автоматически, если установлен `ffmpeg`:
+  ```bash
+  ffmpeg -i OPEN.AVI -c:v mpeg1video -q:v 4 -c:a mp2 -b:a 192k OPEN.MPG
+  ```
 
-Если `skipAllowed = 1`, тап по `SurfaceView` вызывает `MediaPlayer.stop()` и функция возвращает `2`. Если `skipAllowed = 0`, пользователь ждёт завершения.
-
-**Файлы:**
-- `app/jni/src/src/android_video.c` — JNI-мост
-- `app/jni/src/src/movie.c` — диспетчер `MOVIE_PLAY` (Android-путь)
-- `app/src/main/java/su/viende/dividead/DiviDeadActivity.java` — Java-метод `playVideo()`
+Если конвертацию пропустить, вступительное видео не воспроизведётся — движок выведет `OPEN.MPG not found or playback failed` и продолжит к титульному экрану.
 
 ---
 
@@ -320,11 +339,11 @@ Android `AssetManager` медленный для крупных PAK-файлов
 2. Создать подкаталоги `LANG/` и `OGG/` под корнем внутреннего хранилища.
 3. Итерировать список файлов:
    ```
-   SG.DL1, WV.DL1, CS_ROGO.MPG, OPEN.AVI, CLICK.WAV, ICMP.DAT,
+   SG.DL1, WV.DL1, CS_ROGO.MPG, OPEN.MPG, CLICK.WAV, ICMP.DAT,
    LANG/ENGLISH.TXT,
    OGG/OPENING.MID.OGG, OGG/BGM_1.MID.OGG ... OGG/OUTSIDE.MID.OGG
    ```
-   (`LANG/ENGLISH.TXT` опциональный — см. [Локализация](#локализация). Файлы `OGG/*.MID.OGG` предварительно сконвертированы из оригинальных MIDI — см. [Музыка: конвертация MIDI → OGG](#музыка-конвертация-midi--ogg).)
+   (`LANG/ENGLISH.TXT` опциональный — см. [Локализация](#локализация). Файлы `OGG/*.MID.OGG` предварительно сконвертированы из оригинальных MIDI — см. [Музыка: конвертация MIDI → OGG](#музыка-конвертация-midi--ogg). `OPEN.MPG` — сконвертированное вступительное видео, см. [Воспроизведение видео](#воспроизведение-видео).)
 4. Для каждого файла: если уже существует во внутреннем хранилище — пропустить. Иначе открыть через `AAssetManager_open(..., AASSET_MODE_STREAMING)` и стрим-копировать в назначение с буфером 64 КБ.
 5. Записать маркер `.extracted` по завершении. Последующие запуски коротко замыкают распаковку.
 
@@ -352,7 +371,7 @@ Android `AssetManager` медленный для крупных PAK-файлов
 | `sdl12_compat.h` | **новый** — шим-макросы для API SDL 1.2, удалённого в SDL 2.0 |
 | `touch_input.c` | **новый** — детектор жестов |
 | `android_gl_render.c` | **новый** — рендерер OpenGL ES 2.0 |
-| `android_video.c` | **новый** — JNI-мост к `MediaPlayer` |
+| `android_plmpeg.c` | **новый** — MPEG-1 видеоплеер на pl_mpeg (замена Java MediaPlayer) |
 | `android_asset_extract.c` | **новый** — распаковщик при первом запуске |
 | `android_log.c` | **новый** — перенаправляет `stdout` / `stderr` в logcat |
 | `lz_decompress_arm.c` | **новый** — оптимизированный под ARM LZ77-декомпрессор |

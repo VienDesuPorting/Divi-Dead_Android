@@ -1,6 +1,6 @@
 # Divi-Dead — Android Port
 
-A native Android port of the **Divi-Dead** visual novel (Leaf, 1998). Built on SDL2 with an OpenGL ES 2.0 renderer, Android `MediaPlayer` for video, and a custom touch gesture system. The engine's UI strings are hardcoded in C as English defaults; a translation file (`LANG/*.TXT`) can override them later if needed.
+A native Android port of the **Divi-Dead** visual novel (Leaf, 1998). Built on SDL2 with an OpenGL ES 2.0 renderer, a self-contained MPEG-1 video player (pl_mpeg), and a custom touch gesture system. The engine's UI strings are hardcoded in C as English defaults; a translation file (`LANG/*.TXT`) can override them later if needed.
 
 - **minSdk 24**, **targetSdk 35**
 - ABIs: `arm64-v8a`, `armeabi-v7a`
@@ -33,7 +33,7 @@ The engine is derived from gameblabla's fork of soywiz's SDL 1.2 interpreter, re
 | Component | Approach |
 |-----------|----------|
 | Window / GL context | `SDL_GL_CreateContext` + OpenGL ES 2.0 |
-| Video | Android `MediaPlayer` (Java) |
+| Video | pl_mpeg (pure C, MPEG-1 + MP2) |
 | Touch input | Custom gesture detector → SDL key events |
 | Audio | `SDL_mixer` (OGG Vorbis) |
 | Fonts | `SDL_ttf` with `TTF_RenderUTF8_Shaded` |
@@ -58,7 +58,7 @@ You need the original 1998 PC version of Divi-Dead. Copy its files into the proj
 ./populate_assets.sh /path/to/your/dividead-pc-install
 ```
 
-This copies `SG.DL1`, `WV.DL1`, `OGG/*.OGG`, and `CS_ROGO.MPG` into `app/src/main/assets/`. (The helper also tries to copy `LANG/ENGLISH.TXT` if present, but it's optional — see [Localization](#localization).)
+This copies `SG.DL1`, `WV.DL1`, `OGG/*.OGG`, and `CS_ROGO.MPG` into `app/src/main/assets/`. If `OPEN.AVI` is present and `ffmpeg` is installed, the helper also converts it to `OPEN.MPG` (MPEG-1) — see [Video playback](#video-playback). The helper also tries to copy `LANG/ENGLISH.TXT` if present, but it's optional — see [Localization](#localization).
 
 #### Music: MIDI → OGG conversion
 
@@ -122,7 +122,7 @@ Divi-dead_android/
 │   │       │   ├── audio.c                   # Music / SFX / voice
 │   │       │   ├── touch_input.c             # Touch gesture detector
 │   │       │   ├── android_gl_render.c       # OpenGL ES 2.0 renderer
-│   │       │   ├── android_video.c           # JNI bridge to MediaPlayer
+│   │       │   ├── android_plmpeg.c           # MPEG-1 video player (pl_mpeg + SDL_Audio)
 │   │       │   ├── android_asset_extract.c   # First-launch asset unpacker
 │   │       │   ├── android_log.c             # stdout/stderr → logcat
 │   │       │   ├── lz_decompress_arm.c       # ARM-optimized LZ77
@@ -213,9 +213,29 @@ For dirty-rect updates during scene transitions, `android_gl_render_rect()` uplo
 
 ## Video playback
 
-Divi-Dead's PC version uses `.MPG` (MPEG-1) and `.AVI` video for the opening and certain cutscenes. The original engine had SMPEG and a Dreamcast ROQ decoder — both removed from this port. The Android version uses Android's `MediaPlayer` API instead.
+Divi-Dead's PC version ships two videos: `CS_ROGO.MPG` (MPEG-1, opening studio logo) and `OPEN.AVI` (opening cinematic).
 
-The engine calls `MOVIE_PLAY(path, skip)` in C. `android_video.c` bridges this to the Java side via JNI, calling `DiviDeadActivity.playVideo(path, skipAllowed)`. The Java method creates a `SurfaceView`, attaches it to the activity, sets up a `MediaPlayer` with the file path, and starts playback. Hardware decoding goes through Android's standard pipeline (SurfaceFlinger → codec). When playback completes or the user taps to skip, the Java side cleans up the `SurfaceView` and `MediaPlayer`, and returns `1` (completed), `2` (skipped), or `0` (failed).
+The original engine supported three video backends — SMPEG (C++), Dreamcast ROQ, and a Java `MediaPlayer` bridge — all of which had problems on Android. SMPEG and ROQ were removed from this port early on. The Java `MediaPlayer` approach was unreliable across devices: on some SoCs (e.g. Nothing Phone 3A with Adreno) `MediaPlayer.prepare()` fails with `error (1, -2147483648)` for MPEG-1, and on Motorola Moto G60s videos simply don't play.
+
+This port uses [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — a pure C MPEG-1 video + MP2 audio decoder with no platform dependencies. It works identically across all Android devices since the decoding happens entirely in-process.
+
+**Files:**
+- `app/jni/src/src/plmpeg/pl_mpeg.h` — pl_mpeg library (header-only, MIT license)
+- `app/jni/src/src/android_plmpeg.c` — `android_play_video()` implementation
+- `app/jni/src/src/movie.c` — `MOVIE_PLAY()` dispatcher
+
+### How it works
+
+`android_play_video(path, skip)` in `android_plmpeg.c`:
+
+1. Opens the file with `plm_create_with_filename()`.
+2. Allocates a RGBA buffer sized to the video's native dimensions.
+3. Installs a video decode callback and an audio decode callback on the pl_mpeg instance.
+4. Opens an `SDL_AudioDevice` at the file's sample rate (usually 44100 Hz, stereo, S16).
+5. Enters a loop calling `plm_decode(plm, delta_time)` with wall-clock deltas. pl_mpeg internally decides which video frames and audio chunks to emit and invokes the callbacks.
+6. **Video callback** — `plm_frame_to_rgba()` converts the Y/Cb/Cr planes to RGBA on the CPU, wraps the buffer in a temporary `SDL_Surface`, and stretch-blits it onto the engine's 640×480 screen surface. The screen is then uploaded to the GL texture via `android_gl_render()`.
+7. **Audio callback** — pl_mpeg emits 1152-sample float frames (interleaved L/R, range −1.0 to 1.0). These are appended to a lock-free ring buffer. The SDL_Audio callback pulls from the ring, converts float → S16 (`sample * 32767`), and copies into SDL's stream.
+8. **Tap-to-skip** — `SDL_PollEvent()` is called between decode steps. A `FINGERUP`, `MOUSEBUTTONUP`, or `KEYDOWN` event (when `skip=1`) breaks the loop and the function returns `2`.
 
 ### Return codes
 
@@ -223,20 +243,19 @@ The engine calls `MOVIE_PLAY(path, skip)` in C. `android_video.c` bridges this t
 |-------|---------|
 | `1` | Video played to completion |
 | `2` | User skipped by tapping |
-| `0` | Playback failed (file missing, decoder error, etc.) |
+| `0` | Playback failed (file not found, decode error) |
 
-### Aspect ratio
+### Format constraints
 
-`SurfaceView` resizes to the video's native dimensions (`onVideoSizeChanged` listener) scaled to fit within the screen while preserving aspect ratio. The video is never stretched.
+pl_mpeg decodes **MPEG-1 Program Stream** containers only (`.mpg` / `.mpeg`). It does not support AVI, MP4, MKV, or any other container.
 
-### Tap-to-skip
+- `CS_ROGO.MPG` — already MPEG-1 in the PC release, used as-is.
+- `OPEN.AVI` — must be converted to `OPEN.MPG` before building. `populate_assets.sh` does this automatically if `ffmpeg` is installed:
+  ```bash
+  ffmpeg -i OPEN.AVI -c:v mpeg1video -q:v 4 -c:a mp2 -b:a 192k OPEN.MPG
+  ```
 
-If `skipAllowed = 1`, a tap on the `SurfaceView` calls `MediaPlayer.stop()` and the function returns `2`. If `skipAllowed = 0`, the user waits for completion.
-
-**Files:**
-- `app/jni/src/src/android_video.c` — JNI bridge
-- `app/jni/src/src/movie.c` — `MOVIE_PLAY` dispatcher (Android path)
-- `app/src/main/java/su/viende/dividead/DiviDeadActivity.java` — `playVideo()` Java method
+If you skip the conversion, the opening video will not play — the engine logs `OPEN.MPG not found or playback failed` and continues to the title screen.
 
 ---
 
@@ -320,11 +339,11 @@ Android's `AssetManager` is slow for large PAK files because every `SDL_RWFromFi
 2. Create subdirectories `LANG/` and `OGG/` under the internal storage root.
 3. Iterate the file list:
    ```
-   SG.DL1, WV.DL1, CS_ROGO.MPG, OPEN.AVI, CLICK.WAV, ICMP.DAT,
+   SG.DL1, WV.DL1, CS_ROGO.MPG, OPEN.MPG, CLICK.WAV, ICMP.DAT,
    LANG/ENGLISH.TXT,
    OGG/OPENING.MID.OGG, OGG/BGM_1.MID.OGG ... OGG/OUTSIDE.MID.OGG
    ```
-   (`LANG/ENGLISH.TXT` is optional — see [Localization](#localization). The `OGG/*.MID.OGG` files are pre-converted from the original MIDI — see [Music: MIDI → OGG conversion](#music-midi--ogg-conversion).)
+   (`LANG/ENGLISH.TXT` is optional — see [Localization](#localization). The `OGG/*.MID.OGG` files are pre-converted from the original MIDI — see [Music: MIDI → OGG conversion](#music-midi--ogg-conversion). `OPEN.MPG` is the converted opening video — see [Video playback](#video-playback).)
 4. For each file: if it already exists in internal storage, skip it. Otherwise open it via `AAssetManager_open(..., AASSET_MODE_STREAMING)` and stream-copy to the destination with a 64 KB buffer.
 5. Write a `.extracted` marker file when done. Subsequent launches short-circuit.
 
@@ -352,7 +371,7 @@ Derived from gameblabla/soywiz SDL 1.2 engine. Changes that adapt it for SDL2 + 
 | `sdl12_compat.h` | **new** — shim macros for SDL 1.2 API removed in SDL 2.0 |
 | `touch_input.c` | **new** — gesture detector |
 | `android_gl_render.c` | **new** — OpenGL ES 2.0 renderer |
-| `android_video.c` | **new** — JNI bridge to `MediaPlayer` |
+| `android_plmpeg.c` | **new** — MPEG-1 video player using pl_mpeg (replaces Java MediaPlayer) |
 | `android_asset_extract.c` | **new** — first-launch unpacker |
 | `android_log.c` | **new** — redirects `stdout` / `stderr` to logcat |
 | `lz_decompress_arm.c` | **new** — ARM-optimized LZ77 decompressor |

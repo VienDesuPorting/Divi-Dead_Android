@@ -6,20 +6,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.media.MediaPlayer;
-import android.view.SurfaceView;
-import android.view.SurfaceHolder;
-import android.widget.FrameLayout;
-import android.widget.RelativeLayout;
-import java.io.IOException;
 
 public class DiviDeadActivity extends SDLActivity {
-    
-    private MediaPlayer videoPlayer;
-    private SurfaceView videoSurface;
-    private boolean videoPlaying = false;
-    private boolean videoSkipped = false;
-    
+
     @Override
     protected String[] getLibraries() {
         return new String[]{
@@ -30,12 +19,12 @@ public class DiviDeadActivity extends SDLActivity {
             "dividead"
         };
     }
-    
+
     @Override
     protected String[] getArguments() {
         return new String[]{"SG.DL1"};
     }
-    
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
@@ -43,19 +32,19 @@ public class DiviDeadActivity extends SDLActivity {
             hideSystemUI();
         }
     }
-    
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         hideSystemUI();
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
         hideSystemUI();
     }
-    
+
     @SuppressWarnings("deprecation")
     private void hideSystemUI() {
         View decorView = getWindow().getDecorView();
@@ -77,136 +66,5 @@ public class DiviDeadActivity extends SDLActivity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             );
         }
-    }
-    
-    /**
-     * Play a video file using Android MediaPlayer.
-     * Called from native code via JNI.
-     * 
-     * @param path Full path to the video file
-     * @param skipAllowed Whether the user can skip the video (1=yes, 0=no)
-     * @return 1 if video played successfully, 0 if failed, 2 if skipped by user
-     */
-    public int playVideo(final String path, final int skipAllowed) {
-        videoSkipped = false;
-        videoPlaying = true;
-        
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    // Create a SurfaceView for video (centered, will resize to native)
-                    videoSurface = new SurfaceView(DiviDeadActivity.this);
-                    FrameLayout.LayoutParams videoParams = new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        android.view.Gravity.CENTER);
-                    
-                    addContentView(videoSurface, videoParams);
-                    
-                    videoSurface.getHolder().addCallback(new SurfaceHolder.Callback() {
-                        @Override
-                        public void surfaceCreated(SurfaceHolder holder) {
-                            try {
-                                videoPlayer = new MediaPlayer();
-                                videoPlayer.setDataSource(path);
-                                videoPlayer.setDisplay(holder);
-                                videoPlayer.setLooping(false);
-                                
-                                // Resize SurfaceView to native video dimensions (not stretched)
-                                videoPlayer.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
-                                    @Override
-                                    public void onVideoSizeChanged(MediaPlayer mp, int vw, int vh) {
-                                        if (vw > 0 && vh > 0) {
-                                            int sw = getResources().getDisplayMetrics().widthPixels;
-                                            int sh = getResources().getDisplayMetrics().heightPixels;
-                                            double scale = Math.min((double)sw/vw, (double)sh/vh);
-                                            int dw = (int)(vw * scale);
-                                            int dh = (int)(vh * scale);
-                                            videoSurface.setLayoutParams(new FrameLayout.LayoutParams(dw, dh, android.view.Gravity.CENTER));
-                                        }
-                                    }
-                                });
-                                videoPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                                    @Override
-                                    public void onCompletion(MediaPlayer mp) {
-                                        videoPlaying = false;
-                                    }
-                                });
-                                videoPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-                                    @Override
-                                    public boolean onError(MediaPlayer mp, int what, int extra) {
-                                        videoPlaying = false;
-                                        return true;
-                                    }
-                                });
-                                videoPlayer.prepare();
-                                videoPlayer.start();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                                videoPlaying = false;
-                            }
-                        }
-                        
-                        @Override
-                        public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {}
-                        
-                        @Override
-                        public void surfaceDestroyed(SurfaceHolder holder) {
-                            if (videoPlayer != null) {
-                                videoPlayer.release();
-                                videoPlayer = null;
-                            }
-                        }
-                    });
-                    
-                    // Tap to skip
-                    if (skipAllowed == 1) {
-                        videoSurface.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View v) {
-                                if (videoPlayer != null && videoPlayer.isPlaying()) {
-                                    videoPlayer.stop();
-                                }
-                                videoSkipped = true;
-                                videoPlaying = false;
-                            }
-                        });
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    videoPlaying = false;
-                }
-            }
-        });
-        
-        // Wait for video to finish (or be skipped)
-        while (videoPlaying) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException e) {
-                break;
-            }
-        }
-        
-        // Cleanup: remove SurfaceView and release MediaPlayer
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (videoPlayer != null) {
-                    videoPlayer.release();
-                    videoPlayer = null;
-                }
-                if (videoSurface != null) {
-                    // Remove from parent
-                    if (videoSurface.getParent() != null) {
-                        ((FrameLayout) videoSurface.getParent()).removeView(videoSurface);
-                    }
-                    videoSurface = null;
-                }
-            }
-        });
-        
-        return videoSkipped ? 2 : 1;
     }
 }

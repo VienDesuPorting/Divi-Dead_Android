@@ -1,6 +1,8 @@
 /*
- * Video playback - uses Android MediaPlayer on Android, stub on other platforms.
- * Replaces the ROQ decoder which only supports .ROQ format.
+ * Video playback via pl_mpeg (pure C MPEG-1 decoder).
+ *
+ * Replaces the original ROQ / SMPEG / Android MediaPlayer approaches
+ * with a single portable decoder. See android_plmpeg.c for details.
  */
 
 #include "shared.h"
@@ -10,16 +12,15 @@ extern int android_play_video(const char *path, int skip);
 
 uint_fast8_t MOVIE_PLAY(char *name, int skip) {
     printf("MOVIE_PLAY: '%s' (skip=%d)\n", name, skip);
-    
+
     if (!name || !*name) return 0;
-    
+
     /* Check if file exists */
     if (!_file_exists(name)) {
         printf("MOVIE_PLAY: file not found '%s'\n", name);
         return 0;
     }
-    
-    /* Play using Android MediaPlayer */
+
     return android_play_video(name, skip);
 }
 #else

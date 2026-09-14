@@ -167,7 +167,7 @@ static int extract_all_assets(void) {
     
     /* List of files to extract */
     const char *files[] = {
-        "SG.DL1", "WV.DL1", "CS_ROGO.MPG", "OPEN.AVI", "CLICK.WAV", "ICMP.DAT",
+        "SG.DL1", "WV.DL1", "CS_ROGO.MPG", "OPEN.MPG", "CLICK.WAV", "ICMP.DAT",
         "LANG/ENGLISH.TXT",
         "OGG/OPENING.MID.OGG",
         "OGG/BGM_1.MID.OGG",

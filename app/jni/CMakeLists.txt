@@ -73,7 +73,7 @@ set(DIVIDEAD_SOURCES
     src/src/touch_input.c
     src/src/android_log.c
     src/src/android_asset_extract.c
-    src/src/android_video.c
+    src/src/android_plmpeg.c
     src/src/android_gl_render.c
     src/src/lz_decompress_arm.c
     src/src/movie.c
@@ -91,6 +91,9 @@ set(DIVIDEAD_SOURCES
 )
 
 add_library(dividead SHARED ${DIVIDEAD_SOURCES})
+
+# C11 needed for <stdatomic.h> (used in android_plmpeg.c)
+set_target_properties(dividead PROPERTIES C_STANDARD 11)
 
 target_include_directories(dividead PRIVATE
     src/src
