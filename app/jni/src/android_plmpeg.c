@@ -406,38 +406,21 @@ done:
 
     /* Resume SDL_mixer.
      *
-     * On most devices, Mix_ResumeMusic() is enough. On Android 16
-     * (Nothing Phone 3A beta), AudioFlinger leaves the mixer's track
-     * in a half-suspended state after our SDL_CloseAudioDevice —
-     * subsequent Mix_PlayMusic calls corrupt memory and crash the
-     * SDL thread when the engine tries to render the title screen.
+     * We paused Mix_HaltMusic + Mix_Pause before the video; now resume
+     * so the engine's GAME_MUSIC_PLAY() call works normally.
      *
-     * Defensive fix: fully close and reopen the SDL_mixer audio
-     * device. This forces AudioFlinger to allocate a fresh track,
-     * bypassing any stale state. The engine's loaded Mix_Chunk /
-     * Mix_Music assets survive Mix_CloseAudio (they're refcounted
-     * separately), so GAME_MUSIC_PLAY() on the next line works
-     * normally. */
-    Mix_HaltChannel(-1);
-    Mix_HaltMusic();
-    Mix_CloseAudio();
-
-    /* Reopen with the same spec the engine uses in SDL_Audio_Init */
-    if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 1024) < 0) {
-        LOGE("Mix_OpenAudio reopen failed: %s\n", Mix_GetError());
-    } else {
-        /* Restore the click SFX that was loaded in SDL_Audio_Init.
-         * Mix_CloseAudio freed the channels but the loaded chunks
-         * are still in memory (loaded via Mix_LoadWAV_RW). They
-         * just need to be re-allocated to channels. */
-        extern Mix_Chunk *click;
-        if (click) {
-            Mix_ReserveChannels(0);  /* ensure channels are available */
-        }
-        Mix_Resume(-1);
-        if (mixer_was_playing) {
-            Mix_ResumeMusic();
-        }
+     * We do NOT call Mix_CloseAudio() + Mix_OpenAudio() here — that
+     * was attempted in commit 05f457f to work around an Android 16
+     * AudioFlinger issue, but it turned out to be the wrong fix
+     * (the real crash was a GL context loss, fixed by the GL recovery
+     * code in android_gl_render.c). Worse, reopening Mix's audio
+     * device between videos prevents SDL_OpenAudioDevice() from
+     * succeeding on the next video — SDL reports "Audio device
+     * already open" because Mix_OpenAudio and SDL_OpenAudioDevice
+     * both target the default output device. */
+    Mix_Resume(-1);
+    if (mixer_was_playing) {
+        Mix_ResumeMusic();
     }
 
     free(g_frame_rgba);
