@@ -227,28 +227,63 @@ int android_play_video(const char *path, int skip) {
 
     SDL_PauseAudioDevice(g_audio_dev, 0);
 
-    /* Main decode loop.
+    /* Main decode loop with self-pacing based on SDL audio queue level.
      *
-     * Feed wall-clock delta time to plm_decode. It internally decides
-     * which video frames and audio chunks to emit (using the lead_time
-     * to decode audio ahead). The callbacks push data to GL/SDL_Audio.
+     * The naive approach (plm_decode(wall_clock_dt) + sleep) fails on
+     * Android because SDL_Delay granularity is 20-50 ms, not the
+     * requested 16 ms. This causes dt to accumulate, and plm_decode
+     * then emits several video frames + audio chunks in a burst,
+     * producing stutters in both video and audio.
      *
-     * We sleep ~half a frame between iterations to avoid hogging the
-     * CPU while letting plm_decode stay ahead of real time. */
+     * Instead, we monitor SDL_GetQueuedAudioSize and decode aggressively
+     * when the queue is running low, sleep briefly when it's well
+     * filled. This decouples the decode cadence from wall-clock jitter.
+     *
+     * Threshold rationale:
+     *   - want.samples = 4096 (~93 ms at 44.1 kHz)
+     *   - plm_set_audio_lead_time = 93 ms above
+     *   - LOW_WATER = 2048 samples (~46 ms) — half the SDL buffer
+     *   - HIGH_WATER = 16384 samples (~372 ms) — let consumer drain
+     *
+     * SDL_AudioSpec.samples is in frames (per channel), so the actual
+     * byte size of one buffer is samples * 2 channels * 2 bytes = 16384.
+     */
+    const Uint32 AUDIO_LOW_WATER_BYTES = 2048 * 2 * 2;   /* ~46 ms */
+    const Uint32 AUDIO_HIGH_WATER_BYTES = 16384 * 2 * 2; /* ~372 ms */
+
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
     SDL_Event ev;
 
     while (!plm_has_ended(plm)) {
-        Uint32 now = SDL_GetTicks();
-        double dt = (now - last_ticks) / 1000.0;
-        last_ticks = now;
-        /* Cap dt to avoid decoding too far ahead after a long stall
-         * (e.g. GC pause). 1/30 s is the same cap the reference
-         * pl_mpeg_player_sdl.c uses. */
-        if (dt > 1.0 / 30.0) dt = 1.0 / 30.0;
+        Uint32 queued = g_audio_dev ? SDL_GetQueuedAudioSize(g_audio_dev) : 0;
 
-        plm_decode(plm, dt);
+        if (queued < AUDIO_LOW_WATER_BYTES) {
+            /* Audio queue running low — decode in a tight loop without
+             * sleeping until it recovers above LOW_WATER. Cap dt at
+             * 1/30 s per call so plm_decode doesn't burst-emit. */
+            do {
+                if (plm_has_ended(plm)) goto done;
+                Uint32 now = SDL_GetTicks();
+                double dt = (now - last_ticks) / 1000.0;
+                last_ticks = now;
+                if (dt > 1.0 / 30.0) dt = 1.0 / 30.0;
+                plm_decode(plm, dt);
+                queued = g_audio_dev ? SDL_GetQueuedAudioSize(g_audio_dev) : 0;
+            } while (queued < AUDIO_LOW_WATER_BYTES);
+        } else if (queued < AUDIO_HIGH_WATER_BYTES) {
+            /* Queue is healthy — normal decode pass + brief yield */
+            Uint32 now = SDL_GetTicks();
+            double dt = (now - last_ticks) / 1000.0;
+            last_ticks = now;
+            if (dt > 1.0 / 30.0) dt = 1.0 / 30.0;
+            plm_decode(plm, dt);
+            SDL_Delay(4);  /* brief yield to avoid hogging CPU */
+        } else {
+            /* Queue is full — let the consumer drain it */
+            last_ticks = SDL_GetTicks();
+            SDL_Delay(8);
+        }
 
         /* Poll SDL events for tap-to-skip / quit */
         while (SDL_PollEvent(&ev)) {
@@ -262,10 +297,6 @@ int android_play_video(const char *path, int skip) {
                 goto done;
             }
         }
-
-        /* Sleep ~half a video frame. At 30 fps that's ~16 ms, enough
-         * to yield the CPU without falling behind real time. */
-        SDL_Delay((Uint32)(500.0 / (framerate > 0 ? framerate : 30.0)));
     }
 
 done:
