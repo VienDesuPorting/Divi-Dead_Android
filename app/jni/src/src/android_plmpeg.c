@@ -242,6 +242,25 @@ int android_play_video(const char *path, int skip) {
     plm_set_video_decode_callback(plm, video_decode_cb, NULL);
     plm_set_audio_decode_callback(plm, audio_decode_cb, NULL);
 
+    /* Suspend SDL_mixer during video playback.
+     *
+     * SDL_mixer holds its own audio device open for the entire engine
+     * lifetime. On Android, opening a SECOND audio device (for our
+     * video decoder) while SDL_mixer's device is still active causes
+     * intermittent crackling on the second and subsequent videos —
+     * AudioFlinger leaves the mixer's track in a half-suspended state
+     * that produces audible glitches.
+     *
+     * Solution: explicitly pause and halt SDL_mixer before opening
+     * our video audio device, then resume it after the video ends.
+     * This gives us exclusive access to the audio subsystem during
+     * video playback and avoids the cross-device contention. */
+    int mixer_was_playing = (Mix_PlayingMusic() || Mix_Playing(-1));
+    Mix_HaltChannel(-1);
+    Mix_HaltMusic();
+    Mix_Pause(-1);
+    SDL_Delay(20);  /* Give AudioFlinger a moment to actually release */
+
     /* Open SDL_Audio device.
      * samples=2048 gives ~46 ms buffer at 44.1 kHz — large enough to
      * absorb scheduler jitter on Android without underrunning, small
@@ -330,6 +349,15 @@ done:
     }
 
     atomic_store(&g_audio_fade, 0);
+
+    /* Resume SDL_mixer — close and reopen its audio device to get a
+     * clean state, since the underlying Android audio track may have
+     * been disturbed by our temporary second device. The engine's
+     * audio.c will restart music on the next GAME_MUSIC_PLAY() call. */
+    Mix_Resume(-1);
+    if (mixer_was_playing) {
+        Mix_ResumeMusic();
+    }
 
     free(g_frame_rgba);
     g_frame_rgba = NULL;
