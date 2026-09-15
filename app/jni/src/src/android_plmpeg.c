@@ -36,11 +36,17 @@
 
 /* ----- Audio ring buffer -----
  * pl_mpeg decodes 1152-sample frames at a time. SDL_Audio pulls
- * variable-size chunks. We use a 4x-oversized ring to absorb
- * the bursty decode pattern. */
+ * variable-size chunks. We use a 16-frame ring (≈ 425 ms at 44.1 kHz)
+ * with prebuffering to absorb the bursty decode pattern and avoid
+ * underruns that manifest as crackling on long videos. */
 
-#define AUDIO_RING_FRAMES 8
+#define AUDIO_RING_FRAMES 16
 #define AUDIO_RING_SAMPLES (PLM_AUDIO_SAMPLES_PER_FRAME * 2 * AUDIO_RING_FRAMES)
+/* Prebuffer threshold: start SDL_Audio once the ring is at least this
+ * full. 4 frames ≈ 105 ms — enough to absorb scheduler jitter without
+ * making the A/V noticeably out of sync. */
+#define AUDIO_PREBUFFER_FRAMES 4
+#define AUDIO_PREBUFFER_SAMPLES (PLM_AUDIO_SAMPLES_PER_FRAME * 2 * AUDIO_PREBUFFER_FRAMES)
 
 static float audio_ring[AUDIO_RING_SAMPLES];
 static atomic_size_t audio_read_pos;
@@ -118,7 +124,21 @@ static void video_decode_cb(plm_t *plm, plm_frame_t *frame, void *user) {
 static void audio_decode_cb(plm_t *plm, plm_samples_t *samples, void *user) {
     (void)plm; (void)user;
 
+    /* Drop new samples if the ring is already full (decoder overran
+     * the consumer). This happens when SDL_Audio stalls briefly —
+     * better to drop the oldest undecoded audio than to overwrite
+     * unplayed samples and produce a click. */
     size_t wpos = atomic_load(&audio_write_pos);
+    size_t rpos = atomic_load(&audio_read_pos);
+    size_t available = wpos - rpos;
+    if (available + samples->count * 2 >= AUDIO_RING_SAMPLES) {
+        /* Ring would overflow — bump read pointer forward to make room,
+         * dropping the oldest samples. This is preferable to overwriting
+         * unplayed data and produces a less noticeable glitch. */
+        size_t drop = (available + samples->count * 2) - AUDIO_RING_SAMPLES + 1;
+        atomic_store(&audio_read_pos, rpos + drop);
+    }
+
     for (unsigned int i = 0; i < samples->count * 2; i++) {
         audio_ring[wpos % AUDIO_RING_SAMPLES] = samples->interleaved[i];
         wpos++;
@@ -127,6 +147,11 @@ static void audio_decode_cb(plm_t *plm, plm_samples_t *samples, void *user) {
 }
 
 /* ---------- SDL_Audio callback (ring buffer → S16 stream) ---------- */
+
+/* Fade-in counter to avoid a click on the very first audio chunk.
+ * Reset to FADE_LEN at prebuffer end, decremented per sample until 0. */
+#define AUDIO_FADE_LEN 256
+static atomic_int g_audio_fade;
 
 static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
     (void)userdata;
@@ -140,14 +165,24 @@ static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
                          ? available
                          : (size_t)samples_wanted;
 
+    int fade = atomic_load(&g_audio_fade);
     for (size_t i = 0; i < to_read; i++) {
         float s = audio_ring[rpos % AUDIO_RING_SAMPLES];
         /* Clamp and convert [-1.0, 1.0] → [-32768, 32767] */
         if (s > 1.0f) s = 1.0f;
         if (s < -1.0f) s = -1.0f;
-        out[i] = (Sint16)(s * 32767.0f);
+        Sint16 sample = (Sint16)(s * 32767.0f);
+        /* Linear fade-in over the first FADE_LEN samples to avoid click. */
+        if (fade > 0) {
+            float gain = 1.0f - (float)fade / AUDIO_FADE_LEN;
+            sample = (Sint16)(sample * gain);
+            fade--;
+        }
+        out[i] = sample;
         rpos++;
     }
+    if (fade > 0) atomic_store(&g_audio_fade, fade);
+
     /* If we didn't have enough, fill the rest with silence */
     for (size_t i = to_read; i < (size_t)samples_wanted; i++) {
         out[i] = 0;
@@ -207,19 +242,51 @@ int android_play_video(const char *path, int skip) {
     plm_set_video_decode_callback(plm, video_decode_cb, NULL);
     plm_set_audio_decode_callback(plm, audio_decode_cb, NULL);
 
-    /* Open SDL_Audio device */
+    /* Open SDL_Audio device.
+     * samples=2048 gives ~46 ms buffer at 44.1 kHz — large enough to
+     * absorb scheduler jitter on Android without underrunning, small
+     * enough to keep A/V sync tight. */
     SDL_AudioSpec want = {0}, got = {0};
     want.freq = sample_rate > 0 ? sample_rate : 44100;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 1024;
+    want.samples = 2048;
     want.callback = sdl_audio_cb;
     want.userdata = NULL;
     g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
     if (g_audio_dev == 0) {
         LOGE("SDL_OpenAudioDevice failed: %s — continuing without audio\n",
              SDL_GetError());
-    } else {
+    }
+
+    /* Prebuffer: decode frames until the ring is at least half full,
+     * THEN start playback. This eliminates the startup underrun that
+     * was causing the initial crackle. */
+    LOGI("prebuffering audio (target=%d samples)...\n", AUDIO_PREBUFFER_SAMPLES);
+    Uint32 prebuffer_start = SDL_GetTicks();
+    while (1) {
+        Uint32 now = SDL_GetTicks();
+        double dt = (now - prebuffer_start) / 1000.0;
+        prebuffer_start = now;
+        plm_decode(plm, dt);
+
+        size_t rpos = atomic_load(&audio_read_pos);
+        size_t wpos = atomic_load(&audio_write_pos);
+        if (wpos - rpos >= AUDIO_PREBUFFER_SAMPLES) break;
+
+        if (plm_has_ended(plm)) break;
+
+        SDL_Delay(2);
+    }
+    LOGI("prebuffered %zu samples\n",
+         atomic_load(&audio_write_pos) - atomic_load(&audio_read_pos));
+
+    /* Reset fade-in counter — will be consumed by the SDL_Audio callback
+     * over the first AUDIO_FADE_LEN samples (≈ 5 ms at 44.1 kHz) to
+     * eliminate startup click. */
+    atomic_store(&g_audio_fade, AUDIO_FADE_LEN);
+
+    if (g_audio_dev) {
         SDL_PauseAudioDevice(g_audio_dev, 0);
     }
 
@@ -250,9 +317,9 @@ int android_play_video(const char *path, int skip) {
             }
         }
 
-        /* Sleep until ~1 frame ahead to avoid busy loop.
-         * 1000 / framerate ≈ 33ms @ 30fps, 41ms @ 24fps. */
-        SDL_Delay((Uint32)(1000.0 / (framerate > 0 ? framerate : 30.0)) - 1);
+        /* Sleep ~half a frame. Decode twice per video frame to keep
+         * the audio ring fed smoothly without busy-looping. */
+        SDL_Delay((Uint32)(500.0 / (framerate > 0 ? framerate : 30.0)));
     }
 
 done:
@@ -261,6 +328,8 @@ done:
         SDL_CloseAudioDevice(g_audio_dev);
         g_audio_dev = 0;
     }
+
+    atomic_store(&g_audio_fade, 0);
 
     free(g_frame_rgba);
     g_frame_rgba = NULL;
