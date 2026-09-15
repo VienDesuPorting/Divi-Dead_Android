@@ -187,13 +187,61 @@ void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *
         if (!android_gl_init(window)) return;
     }
 
-    SDL_GL_MakeCurrent(window, gl_context);
+    /* Same GL context validity check as in android_gl_render.
+     * On Adreno 800-series the context can become invalid after video
+     * playback, and ignoring MakeCurrent's return value leads to
+     * SIGSEGV in subsequent GL calls. */
+    int mc_result = SDL_GL_MakeCurrent(window, gl_context);
+    if (mc_result != 0) {
+        printf("GL rect: SDL_GL_MakeCurrent failed: %s — attempting reinit\n",
+               SDL_GetError());
+        if (gl_context) {
+            SDL_GL_DeleteContext(gl_context);
+            gl_context = NULL;
+        }
+        gl_initialized = 0;
+        if (!android_gl_init(window)) {
+            printf("GL rect: reinit failed — skipping render\n");
+            return;
+        }
+        if (SDL_GL_MakeCurrent(window, gl_context) != 0) {
+            printf("GL rect: MakeCurrent still failing after reinit — skipping\n");
+            return;
+        }
+    }
 
     int win_w, win_h;
     SDL_GetWindowSize(window, &win_w, &win_h);
 
-    
+    /* Validate inputs before locking — defensive against bad rect
+     * or null surface that could happen after a context loss. */
+    if (!surface || !rect || !surface->format) {
+        printf("GL rect: invalid surface or rect (surface=%p rect=%p)\n",
+               (void*)surface, (void*)rect);
+        return;
+    }
+    if (rect->w <= 0 || rect->h <= 0) {
+        return;  /* nothing to update */
+    }
+    if (rect->x < 0 || rect->y < 0 ||
+        rect->x + rect->w > surface->w ||
+        rect->y + rect->h > surface->h) {
+        printf("GL rect: rect [%d,%d %dx%d] out of surface bounds [%dx%d]\n",
+               rect->x, rect->y, rect->w, rect->h, surface->w, surface->h);
+        return;
+    }
+
     SDL_LockSurface(surface);
+
+    /* Re-read pixels pointer AFTER LockSurface — on some drivers the
+     * pixels pointer changes after lock, and the pre-lock value may
+     * point to freed/invalid memory. This was the root cause of the
+     * Adreno 810 crash at the memcpy in the row loop. */
+    if (!surface->pixels) {
+        printf("GL rect: surface->pixels is NULL after LockSurface\n");
+        SDL_UnlockSurface(surface);
+        return;
+    }
 
     int bytes_per_pixel = surface->format->BytesPerPixel;
     Uint8 *src = (Uint8 *)surface->pixels;
