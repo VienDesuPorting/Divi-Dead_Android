@@ -164,7 +164,6 @@ static atomic_int g_audio_fade;
  * audible glitch than inserting silence (which creates a discontinuity
  * at both the start and end of the gap). */
 static Sint16 g_last_sample = 0;
-static atomic_int g_underrun_count;
 
 static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
     (void)userdata;
@@ -200,9 +199,8 @@ static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
     /* If we didn't have enough, fill the rest with the last sample
      * (zero-order hold) instead of silence. This produces a flat line
      * at the last sample's value, which is much less audible than
-     * a jump to silence and back. Count underruns for diagnostics. */
+     * a jump to silence and back. */
     if (to_read < (size_t)samples_wanted) {
-        atomic_fetch_add(&g_underrun_count, 1);
         for (size_t i = to_read; i < (size_t)samples_wanted; i++) {
             out[i] = g_last_sample;
         }
@@ -301,7 +299,6 @@ int android_play_video(const char *path, int skip) {
     /* Prebuffer: decode frames until the ring is at least half full,
      * THEN start playback. This eliminates the startup underrun that
      * was causing the initial crackle. */
-    LOGI("prebuffering audio (target=%d samples)...\n", AUDIO_PREBUFFER_SAMPLES);
     Uint32 prebuffer_start = SDL_GetTicks();
     while (1) {
         Uint32 now = SDL_GetTicks();
@@ -317,8 +314,6 @@ int android_play_video(const char *path, int skip) {
 
         SDL_Delay(2);
     }
-    LOGI("prebuffered %zu samples\n",
-         atomic_load(&audio_write_pos) - atomic_load(&audio_read_pos));
 
     /* Reset fade-in counter — will be consumed by the SDL_Audio callback
      * over the first AUDIO_FADE_LEN samples (≈ 5 ms at 44.1 kHz) to
@@ -328,9 +323,6 @@ int android_play_video(const char *path, int skip) {
     if (g_audio_dev) {
         SDL_PauseAudioDevice(g_audio_dev, 0);
     }
-
-    /* Reset underrun counter for this video */
-    atomic_store(&g_underrun_count, 0);
 
     /* Main decode loop with self-pacing.
      *
@@ -353,7 +345,6 @@ int android_play_video(const char *path, int skip) {
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
     SDL_Event ev;
-    Uint32 log_timer = SDL_GetTicks();
 
     while (!plm_has_ended(plm)) {
         size_t rpos = atomic_load(&audio_read_pos);
@@ -401,16 +392,6 @@ int android_play_video(const char *path, int skip) {
                 goto done;
             }
         }
-
-        /* Log underrun count every 5 seconds for diagnostics */
-        if (SDL_GetTicks() - log_timer > 5000) {
-            int underruns = atomic_load(&g_underrun_count);
-            if (underruns > 0) {
-                LOGI("underruns so far: %d (ring available=%zu/%d)\n",
-                     underruns, available, AUDIO_RING_SAMPLES);
-            }
-            log_timer = SDL_GetTicks();
-        }
     }
 
 done:
@@ -422,14 +403,6 @@ done:
 
     atomic_store(&g_audio_fade, 0);
     g_last_sample = 0;
-
-    /* Log total underruns for this video — helps diagnose remaining
-     * audio issues. 0 underruns = perfectly clean playback. */
-    int total_underruns = atomic_load(&g_underrun_count);
-    if (total_underruns > 0) {
-        LOGI("audio underruns during playback: %d\n", total_underruns);
-    }
-    atomic_store(&g_underrun_count, 0);
 
     /* Resume SDL_mixer.
      *

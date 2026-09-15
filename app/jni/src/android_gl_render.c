@@ -114,14 +114,20 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
     }
 
     /* Verify the GL context is still valid before doing anything.
-     * On Adreno 800-series GPUs (Nothing Phone 3A, Snapdragon 7s Gen 3),
-     * the GL context can become invalid after video playback —
-     * SDL_GL_MakeCurrent returns failure but the old code ignored it,
-     * leading to SIGSEGV on the first GL call. */
+     *
+     * On Android 15+, devices with Adreno 800-series GPUs ship with
+     * ANGLE as the default OpenGL ES driver (GL calls translated to
+     * Vulkan). ANGLE is stricter than the legacy native GL driver —
+     * it does not silently tolerate use of an invalidated context.
+     * After video playback the context can become invalid; ignoring
+     * MakeCurrent's return value leads to SIGSEGV on the next GL call.
+     *
+     * See:
+     *   https://developer.android.com/games/develop/vulkan/overview
+     *   https://github.com/libretro/RetroArch/issues/19462
+     */
     int mc_result = SDL_GL_MakeCurrent(window, gl_context);
     if (mc_result != 0) {
-        printf("GL: SDL_GL_MakeCurrent failed: %s — attempting reinit\n",
-               SDL_GetError());
         /* Try to recover by reinitializing the GL context */
         if (gl_context) {
             SDL_GL_DeleteContext(gl_context);
@@ -132,7 +138,6 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
             printf("GL: reinit failed — skipping render\n");
             return;
         }
-        /* Retry MakeCurrent after reinit */
         if (SDL_GL_MakeCurrent(window, gl_context) != 0) {
             printf("GL: MakeCurrent still failing after reinit — skipping\n");
             return;
@@ -187,14 +192,10 @@ void android_gl_render_rect(SDL_Window *window, SDL_Surface *surface, SDL_Rect *
         if (!android_gl_init(window)) return;
     }
 
-    /* Same GL context validity check as in android_gl_render.
-     * On Adreno 800-series the context can become invalid after video
-     * playback, and ignoring MakeCurrent's return value leads to
-     * SIGSEGV in subsequent GL calls. */
+    /* Same GL context validity check + recovery as in android_gl_render.
+     * See the comment there for rationale (ANGLE on Adreno 800-series). */
     int mc_result = SDL_GL_MakeCurrent(window, gl_context);
     if (mc_result != 0) {
-        printf("GL rect: SDL_GL_MakeCurrent failed: %s — attempting reinit\n",
-               SDL_GetError());
         if (gl_context) {
             SDL_GL_DeleteContext(gl_context);
             gl_context = NULL;

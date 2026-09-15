@@ -111,27 +111,27 @@ Divi-dead_android/
 │   ├── build.gradle                          # AGP 8.7.2 config
 │   ├── jni/
 │   │   ├── CMakeLists.txt                    # FetchContent for SDL2 stack
+│   │   ├── include/SDL/                      # Wrapper mapping SDL/ → SDL2/
+│   │   │   ├── sdl12_compat.h                # SDL 1.2 → 2.0 shim
+│   │   │   └── SDL_*.h                       # Original SDL 1.2 headers
 │   │   └── src/
-│   │       ├── src/                          # Engine C sources (patched)
-│   │       │   ├── main.c                    # Main loop + Android entry
-│   │       │   ├── text.c                    # UTF-8 text rendering
-│   │       │   ├── menus.c                   # Title / options / save-load
-│   │       │   ├── script.c                  # In-game script VM
-│   │       │   ├── vfs.c                     # VFS layer over DL1 archives
-│   │       │   ├── images.c                  # LZ image decoder + cache
-│   │       │   ├── audio.c                   # Music / SFX / voice
-│   │       │   ├── touch_input.c             # Touch gesture detector
-│   │       │   ├── android_gl_render.c       # OpenGL ES 2.0 renderer
-│   │       │   ├── android_plmpeg.c           # MPEG-1 video player (pl_mpeg + SDL_Audio)
-│   │       │   ├── android_asset_extract.c   # First-launch asset unpacker
-│   │       │   ├── android_log.c             # stdout/stderr → logcat
-│   │       │   ├── lz_decompress_arm.c       # ARM-optimized LZ77
-│   │       │   ├── movie.c                   # MOVIE_PLAY dispatcher
-│   │       │   └── ...
+│   │       ├── main.c                        # Main loop + Android entry
+│   │       ├── text.c                        # UTF-8 text rendering
+│   │       ├── menus.c                       # Title / options / save-load
+│   │       ├── script.c                      # In-game script VM
+│   │       ├── vfs.c                         # VFS layer over DL1 archives
+│   │       ├── images.c                      # LZ image decoder + cache
+│   │       ├── audio.c                       # Music / SFX / voice
+│   │       ├── touch_input.c                 # Touch gesture detector
+│   │       ├── android_gl_render.c           # OpenGL ES 2.0 renderer
+│   │       ├── android_plmpeg.c              # MPEG-1 video player (pl_mpeg + SDL_Audio)
+│   │       ├── android_asset_extract.c       # First-launch asset unpacker
+│   │       ├── android_log.c                 # stdout/stderr → logcat
+│   │       ├── lz_decompress_arm.c           # ARM-optimized LZ77
+│   │       ├── movie.c                       # MOVIE_PLAY dispatcher
+│   │       ├── plmpeg/pl_mpeg.h              # pl_mpeg library (header-only)
 │   │       ├── RES/                          # Compiled-in resources (.c blobs)
-│   │       └── include/SDL/                  # Wrapper mapping SDL/ → SDL2/
-│   │           ├── sdl12_compat.h            # SDL 1.2 → 2.0 shim
-│   │           └── SDL_*.h                   # Original SDL 1.2 headers
+│   │       └── ...
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       ├── java/
@@ -154,7 +154,17 @@ Divi-dead_android/
 
 The port bypasses `SDL_Renderer` entirely. `SDL_Renderer` does not work reliably on Android with OpenGL ES backends across all GPU vendors (Adreno, Mali, PowerVR), so we use raw OpenGL ES 2.0 through `SDL_GL_*` instead.
 
-**File:** `app/jni/src/src/android_gl_render.c`
+**File:** `app/jni/src/android_gl_render.c`
+
+### A note on ANGLE (Android 15+, Adreno 800-series)
+
+Starting with Android 15, Google ships [ANGLE](https://developer.android.com/games/develop/vulkan/overview) as the default OpenGL ES driver on some devices — most notably those with Adreno 800-series GPUs (Snapdragon 7s Gen 3 / 8 Elite / 8s Gen 4). ANGLE translates OpenGL ES calls to Vulkan underneath, and is stricter than the legacy native GL driver: it does not silently tolerate use of an invalidated GL context, and `surface->pixels` may not be valid before `SDL_LockSurface`.
+
+The renderer therefore checks `SDL_GL_MakeCurrent`'s return value before every GL call. On failure it deletes and reinitializes the GL context (recompiling shaders, reallocating the texture). On older devices this is a no-op; on Adreno 800-series with ANGLE it prevents the SIGSEGV that would otherwise occur after video playback.
+
+References:
+- [Use Vulkan for graphics — Android developer docs](https://developer.android.com/games/develop/vulkan/overview)
+- [RetroArch issue #19462 — same ANGLE black-screen bug on Adreno 825 / Android 16](https://github.com/libretro/RetroArch/issues/19462)
 
 ### Init
 
@@ -220,9 +230,9 @@ The original engine supported three video backends — SMPEG (C++), Dreamcast RO
 This port uses [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — a pure C MPEG-1 video + MP2 audio decoder with no platform dependencies. It works identically across all Android devices since the decoding happens entirely in-process.
 
 **Files:**
-- `app/jni/src/src/plmpeg/pl_mpeg.h` — pl_mpeg library (header-only, MIT license)
-- `app/jni/src/src/android_plmpeg.c` — `android_play_video()` implementation
-- `app/jni/src/src/movie.c` — `MOVIE_PLAY()` dispatcher
+- `app/jni/src/plmpeg/pl_mpeg.h` — pl_mpeg library (header-only, MIT license)
+- `app/jni/src/android_plmpeg.c` — `android_play_video()` implementation
+- `app/jni/src/movie.c` — `MOVIE_PLAY()` dispatcher
 
 ### How it works
 
@@ -270,7 +280,7 @@ If you skip the conversion, the opening video will not play — the engine logs 
 
 A custom gesture detector maps touch events to the engine's existing key-event system. The engine keeps its `keys` bitmask (`K_A`, `K_B`, `K_L`, `K_R`, `K_UP`, `K_DOWN`, ...), and `touch_input.c` synthesizes the appropriate bits from `SDL_FINGERDOWN` / `SDL_FINGERMOTION` / `SDL_FINGERUP` events.
 
-**File:** `app/jni/src/src/touch_input.c`
+**File:** `app/jni/src/touch_input.c`
 
 ### Thresholds
 
@@ -338,7 +348,7 @@ The menu's layout geometry is published by the engine via `TOUCH_SET_MENU_GEOMET
 
 Android's `AssetManager` is slow for large PAK files because every `SDL_RWFromFile` call goes through JNI. To work around this, the port extracts all assets to the app's internal storage (`/data/data/su.viende.dividead/files/`) on first launch and reads from the filesystem thereafter.
 
-**File:** `app/jni/src/src/android_asset_extract.c`
+**File:** `app/jni/src/android_asset_extract.c`
 
 ### Extraction logic
 

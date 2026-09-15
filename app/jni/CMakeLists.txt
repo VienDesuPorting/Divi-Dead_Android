@@ -130,28 +130,28 @@ set(SDL2_INCLUDES ${sdl_SOURCE_DIR}/include)
 # ----------------------------------------------------------------------------
 
 set(DIVIDEAD_SOURCES
-    src/src/main.c
-    src/src/text.c
-    src/src/menus.c
-    src/src/script.c
-    src/src/vfs.c
-    src/src/images.c
-    src/src/audio.c
-    src/src/rects.c
-    src/src/ringread.c
-    src/src/system.c
-    src/src/system_unix.c
-    src/src/credit.c
-    src/src/input.c
-    src/src/zoom.c
-    src/src/sjis_table.c
-    src/src/touch_input.c
-    src/src/android_log.c
-    src/src/android_asset_extract.c
-    src/src/android_plmpeg.c
-    src/src/android_gl_render.c
-    src/src/lz_decompress_arm.c
-    src/src/movie.c
+    src/main.c
+    src/text.c
+    src/menus.c
+    src/script.c
+    src/vfs.c
+    src/images.c
+    src/audio.c
+    src/rects.c
+    src/ringread.c
+    src/system.c
+    src/system_unix.c
+    src/credit.c
+    src/input.c
+    src/zoom.c
+    src/sjis_table.c
+    src/touch_input.c
+    src/android_log.c
+    src/android_asset_extract.c
+    src/android_plmpeg.c
+    src/android_gl_render.c
+    src/lz_decompress_arm.c
+    src/movie.c
     src/RES/FONT_TTF.c
     src/RES/FONT2_TTF.c
     src/RES/CLICK_WAV.c
@@ -171,7 +171,7 @@ add_library(dividead SHARED ${DIVIDEAD_SOURCES})
 set_target_properties(dividead PROPERTIES C_STANDARD 11)
 
 target_include_directories(dividead PRIVATE
-    src/src
+    src
     src/RES
     include                      # Wrapper: SDL/ -> SDL2/
     ${SDL2_INCLUDES}

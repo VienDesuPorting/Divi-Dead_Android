@@ -111,27 +111,27 @@ Divi-dead_android/
 │   ├── build.gradle                          # конфиг AGP 8.7.2
 │   ├── jni/
 │   │   ├── CMakeLists.txt                    # FetchContent для SDL2-стека
+│   │   ├── include/SDL/                      # Обёртка, маппящая SDL/ → SDL2/
+│   │   │   ├── sdl12_compat.h                # Шим SDL 1.2 → 2.0
+│   │   │   └── SDL_*.h                       # Оригинальные SDL 1.2 заголовки
 │   │   └── src/
-│   │       ├── src/                          # C-исходники движка (с патчами)
-│   │       │   ├── main.c                    # Главный цикл + Android-вход
-│   │       │   ├── text.c                    # Рендеринг UTF-8 текста
-│   │       │   ├── menus.c                   # Заголовок / опции / сохранения
-│   │       │   ├── script.c                  # Внутриигровая script VM
-│   │       │   ├── vfs.c                     # VFS над DL1-архивами
-│   │       │   ├── images.c                  # LZ-декодер изображений + кеш
-│   │       │   ├── audio.c                   # Музыка / SFX / озвучка
-│   │       │   ├── touch_input.c             # Детектор сенсорных жестов
-│   │       │   ├── android_gl_render.c       # Рендерер OpenGL ES 2.0
-│   │       │   ├── android_plmpeg.c           # MPEG-1 видеоплеер (pl_mpeg + SDL_Audio)
-│   │       │   ├── android_asset_extract.c   # Распаковщик ассетов при первом запуске
-│   │       │   ├── android_log.c             # stdout/stderr → logcat
-│   │       │   ├── lz_decompress_arm.c       # Оптимизированный под ARM LZ77
-│   │       │   ├── movie.c                   # Диспетчер MOVIE_PLAY
-│   │       │   └── ...
+│   │       ├── main.c                        # Главный цикл + Android-вход
+│   │       ├── text.c                        # Рендеринг UTF-8 текста
+│   │       ├── menus.c                       # Заголовок / опции / сохранения
+│   │       ├── script.c                      # Внутриигровая script VM
+│   │       ├── vfs.c                         # VFS над DL1-архивами
+│   │       ├── images.c                      # LZ-декодер изображений + кеш
+│   │       ├── audio.c                       # Музыка / SFX / озвучка
+│   │       ├── touch_input.c                 # Детектор сенсорных жестов
+│   │       ├── android_gl_render.c           # Рендерер OpenGL ES 2.0
+│   │       ├── android_plmpeg.c              # MPEG-1 видеоплеер (pl_mpeg + SDL_Audio)
+│   │       ├── android_asset_extract.c       # Распаковщик ассетов при первом запуске
+│   │       ├── android_log.c                 # stdout/stderr → logcat
+│   │       ├── lz_decompress_arm.c           # Оптимизированный под ARM LZ77
+│   │       ├── movie.c                       # Диспетчер MOVIE_PLAY
+│   │       ├── plmpeg/pl_mpeg.h              # библиотека pl_mpeg (header-only)
 │   │       ├── RES/                          # Вкомпилированные ресурсы (.c blobs)
-│   │       └── include/SDL/                  # Обёртка, маппящая SDL/ → SDL2/
-│   │           ├── sdl12_compat.h            # Шим SDL 1.2 → 2.0
-│   │           └── SDL_*.h                   # Оригинальные SDL 1.2 заголовки
+│   │       └── ...
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       ├── java/
@@ -154,7 +154,17 @@ Divi-dead_android/
 
 Порт полностью обходит `SDL_Renderer`. `SDL_Renderer` ненадёжно работает на Android с OpenGL ES-бэкендом на GPU разных вендоров (Adreno, Mali, PowerVR), поэтому вместо него используется сырой OpenGL ES 2.0 через `SDL_GL_*`.
 
-**Файл:** `app/jni/src/src/android_gl_render.c`
+**Файл:** `app/jni/src/android_gl_render.c`
+
+### Замечание про ANGLE (Android 15+, Adreno 800-series)
+
+Начиная с Android 15, Google поставляет [ANGLE](https://developer.android.com/games/develop/vulkan/overview) как стандартный OpenGL ES драйвер на некоторых устройствах — в первую очередь на GPU Adreno 800-series (Snapdragon 7s Gen 3 / 8 Elite / 8s Gen 4). ANGLE транслирует OpenGL ES вызовы в Vulkan под капотом и строже старого нативного GL-драйвера: не терпит использования невалидного GL-контекста, а `surface->pixels` может быть невалидным до `SDL_LockSurface`.
+
+Поэтому рендерер проверяет return value `SDL_GL_MakeCurrent` перед каждым GL-вызовом. При ошибке он удаляет и переинициализирует GL-контекст (перекомпиляция шейдеров, перевыделение текстуры). На старых устройствах это no-op; на Adreno 800-series с ANGLE это предотвращает SIGSEGV, который иначе возникал бы после воспроизведения видео.
+
+Ссылки:
+- [Use Vulkan for graphics — Android developer docs](https://developer.android.com/games/develop/vulkan/overview)
+- [RetroArch issue #19462 — тот же баг ANGLE с чёрным экраном на Adreno 825 / Android 16](https://github.com/libretro/RetroArch/issues/19462)
 
 ### Инициализация
 
@@ -220,9 +230,9 @@ PC-версия Divi-Dead поставляется с двумя роликам�
 Этот порт использует [pl_mpeg](https://github.com/phoboslab/pl_mpeg) — чистый C-декодер MPEG-1 видео + MP2 аудио, без платформенных зависимостей. Работает одинаково на всех Android-устройствах, потому что декодирование полностью происходит в процессе приложения.
 
 **Файлы:**
-- `app/jni/src/src/plmpeg/pl_mpeg.h` — библиотека pl_mpeg (header-only, MIT-лицензия)
-- `app/jni/src/src/android_plmpeg.c` — реализация `android_play_video()`
-- `app/jni/src/src/movie.c` — диспетчер `MOVIE_PLAY()`
+- `app/jni/src/plmpeg/pl_mpeg.h` — библиотека pl_mpeg (header-only, MIT-лицензия)
+- `app/jni/src/android_plmpeg.c` — реализация `android_play_video()`
+- `app/jni/src/movie.c` — диспетчер `MOVIE_PLAY()`
 
 ### Как это работает
 
@@ -270,7 +280,7 @@ pl_mpeg декодирует **только MPEG-1 Program Stream** контей
 
 Собственный детектор жестов преобразует сенсорные события в уже существующую в движке систему клавишных событий. Движок хранит битмаск `keys` (`K_A`, `K_B`, `K_L`, `K_R`, `K_UP`, `K_DOWN`, ...), а `touch_input.c` синтезирует соответствующие биты из событий `SDL_FINGERDOWN` / `SDL_FINGERMOTION` / `SDL_FINGERUP`.
 
-**Файл:** `app/jni/src/src/touch_input.c`
+**Файл:** `app/jni/src/touch_input.c`
 
 ### Пороги
 
@@ -338,7 +348,7 @@ return (game_y - menu_geom.y) / menu_geom.item_h;
 
 Android `AssetManager` медленный для крупных PAK-файлов, потому что каждый вызов `SDL_RWFromFile` идёт через JNI. Чтобы обойти это, порт извлекает все ассеты во внутреннее хранилище приложения (`/data/data/su.viende.dividead/files/`) при первом запуске и затем читает с файловой системы.
 
-**Файл:** `app/jni/src/src/android_asset_extract.c`
+**Файл:** `app/jni/src/android_asset_extract.c`
 
 ### Логика распаковки
 
