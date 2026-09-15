@@ -196,33 +196,32 @@ int android_play_video(const char *path, int skip) {
     SDL_Delay(20);  /* Give AudioFlinger a moment to actually release */
 
     /* Open SDL_Audio device using the queue API (no callback).
-     * samples=4096 gives ~93 ms buffer at 44.1 kHz. This is also
-     * passed to plm_set_audio_lead_time below so plm_decode keeps
-     * the audio queue filled with the same amount of headroom. */
+     * samples=8192 gives ~186 ms buffer at 44.1 kHz — double the
+     * previous 4096 to better absorb Android scheduler jitter and
+     * GC pauses (~50 ms each) that were causing occasional crackles.
+     * Lead time below is matched to this buffer size. */
     SDL_AudioSpec want = {0};
     want.freq = sample_rate > 0 ? sample_rate : 44100;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 4096;
-    /* No callback — we'll use SDL_QueueAudio to push samples.
-     * SDL_AUDIO_ALLOW_FREQUENCY_CHANGE not needed; we want exactly
-     * this spec so the lead_time calculation is exact. */
+    want.samples = 8192;
+    /* No callback — we'll use SDL_QueueAudio to push samples. */
     g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
     if (g_audio_dev == 0) {
         LOGE("SDL_OpenAudioDevice failed: %s — continuing without audio\n",
              SDL_GetError());
     }
 
-    /* Tell pl_mpeg to decode audio ~93 ms ahead of video, matching
-     * the SDL_AudioSpec.samples buffer size. Without this, plm_decode
-     * only decodes audio up to the current video time, leaving the
-     * SDL audio queue at risk of underrun whenever the decode loop
-     * sleeps briefly. With lead_time set, audio is always decoded
-     * one buffer ahead, giving SDL a steady supply.
+    /* Tell pl_mpeg to decode audio ahead of video by ~250 ms — larger
+     * than the SDL buffer (186 ms) so the queue is always pre-filled
+     * by one extra buffer's worth, giving us headroom to absorb GC
+     * pauses and scheduler hiccups without underrunning.
      *
-     * This matches the official pl_mpeg_player_sdl.c reference. */
+     * The pl_mpeg documentation suggests setting this to
+     * (SDL_AudioSpec.samples / samplerate), but that's the minimum.
+     * A larger value trades a bit of A/V sync latency for stability. */
     if (g_audio_dev && sample_rate > 0) {
-        plm_set_audio_lead_time(plm, (double)want.samples / (double)sample_rate);
+        plm_set_audio_lead_time(plm, 0.250);
     }
 
     SDL_PauseAudioDevice(g_audio_dev, 0);
@@ -239,17 +238,21 @@ int android_play_video(const char *path, int skip) {
      * when the queue is running low, sleep briefly when it's well
      * filled. This decouples the decode cadence from wall-clock jitter.
      *
-     * Threshold rationale:
-     *   - want.samples = 4096 (~93 ms at 44.1 kHz)
-     *   - plm_set_audio_lead_time = 93 ms above
-     *   - LOW_WATER = 2048 samples (~46 ms) — half the SDL buffer
-     *   - HIGH_WATER = 16384 samples (~372 ms) — let consumer drain
+     * Threshold rationale (with want.samples = 8192, lead_time = 250 ms):
+     *   - LOW_WATER = 4096 frames (~93 ms) — half the SDL buffer;
+     *     below this we decode aggressively with no sleep
+     *   - HIGH_WATER = 32768 frames (~743 ms) — generous upper bound;
+     *     above this we sleep to let the consumer drain
+     *
+     * The wide window between LOW and HIGH (650 ms) gives the decoder
+     * room to burst-fill after a GC pause without immediately hitting
+     * the high-water cap.
      *
      * SDL_AudioSpec.samples is in frames (per channel), so the actual
-     * byte size of one buffer is samples * 2 channels * 2 bytes = 16384.
+     * byte size of N frames is N * 2 channels * 2 bytes (S16 stereo).
      */
-    const Uint32 AUDIO_LOW_WATER_BYTES = 2048 * 2 * 2;   /* ~46 ms */
-    const Uint32 AUDIO_HIGH_WATER_BYTES = 16384 * 2 * 2; /* ~372 ms */
+    const Uint32 AUDIO_LOW_WATER_BYTES = 4096 * 2 * 2;    /* ~93 ms */
+    const Uint32 AUDIO_HIGH_WATER_BYTES = 32768 * 2 * 2;  /* ~743 ms */
 
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
