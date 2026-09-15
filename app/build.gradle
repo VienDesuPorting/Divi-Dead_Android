@@ -14,7 +14,10 @@ android {
         versionName "1.0"
 
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            // x86_64 added for Android 16 emulator testing (Nothing Phone 3A
+            // crash investigation). Can be removed once the Adreno 800-series
+            // render crash is fixed.
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
         }
 
         externalNativeBuild {
@@ -53,6 +56,13 @@ android {
         debug {
             debuggable true
             jniDebuggable true
+            // Keep full debug symbols (unstripped) in the build layout so
+            // crash reports / logcat stack traces show function names and
+            // line numbers instead of raw addresses. Essential for
+            // diagnosing the Adreno 800-series render crash.
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
 

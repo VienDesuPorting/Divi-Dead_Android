@@ -113,7 +113,31 @@ void android_gl_render(SDL_Window *window, SDL_Surface *surface) {
         if (!android_gl_init(window)) return;
     }
 
-    SDL_GL_MakeCurrent(window, gl_context);
+    /* Verify the GL context is still valid before doing anything.
+     * On Adreno 800-series GPUs (Nothing Phone 3A, Snapdragon 7s Gen 3),
+     * the GL context can become invalid after video playback —
+     * SDL_GL_MakeCurrent returns failure but the old code ignored it,
+     * leading to SIGSEGV on the first GL call. */
+    int mc_result = SDL_GL_MakeCurrent(window, gl_context);
+    if (mc_result != 0) {
+        printf("GL: SDL_GL_MakeCurrent failed: %s — attempting reinit\n",
+               SDL_GetError());
+        /* Try to recover by reinitializing the GL context */
+        if (gl_context) {
+            SDL_GL_DeleteContext(gl_context);
+            gl_context = NULL;
+        }
+        gl_initialized = 0;
+        if (!android_gl_init(window)) {
+            printf("GL: reinit failed — skipping render\n");
+            return;
+        }
+        /* Retry MakeCurrent after reinit */
+        if (SDL_GL_MakeCurrent(window, gl_context) != 0) {
+            printf("GL: MakeCurrent still failing after reinit — skipping\n");
+            return;
+        }
+    }
 
     int win_w, win_h;
     SDL_GetWindowSize(window, &win_w, &win_h);
