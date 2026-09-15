@@ -153,6 +153,13 @@ static void audio_decode_cb(plm_t *plm, plm_samples_t *samples, void *user) {
 #define AUDIO_FADE_LEN 256
 static atomic_int g_audio_fade;
 
+/* Last sample written to the output, used for zero-order hold when
+ * the ring underruns. Repeating the last sample produces a much less
+ * audible glitch than inserting silence (which creates a discontinuity
+ * at both the start and end of the gap). */
+static Sint16 g_last_sample = 0;
+static atomic_int g_underrun_count;
+
 static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
     (void)userdata;
     Sint16 *out = (Sint16 *)stream;
@@ -179,13 +186,20 @@ static void sdl_audio_cb(void *userdata, Uint8 *stream, int len) {
             fade--;
         }
         out[i] = sample;
+        g_last_sample = sample;
         rpos++;
     }
     if (fade > 0) atomic_store(&g_audio_fade, fade);
 
-    /* If we didn't have enough, fill the rest with silence */
-    for (size_t i = to_read; i < (size_t)samples_wanted; i++) {
-        out[i] = 0;
+    /* If we didn't have enough, fill the rest with the last sample
+     * (zero-order hold) instead of silence. This produces a flat line
+     * at the last sample's value, which is much less audible than
+     * a jump to silence and back. Count underruns for diagnostics. */
+    if (to_read < (size_t)samples_wanted) {
+        atomic_fetch_add(&g_underrun_count, 1);
+        for (size_t i = to_read; i < (size_t)samples_wanted; i++) {
+            out[i] = g_last_sample;
+        }
     }
     atomic_store(&audio_read_pos, rpos);
 }
@@ -262,14 +276,14 @@ int android_play_video(const char *path, int skip) {
     SDL_Delay(20);  /* Give AudioFlinger a moment to actually release */
 
     /* Open SDL_Audio device.
-     * samples=2048 gives ~46 ms buffer at 44.1 kHz — large enough to
-     * absorb scheduler jitter on Android without underrunning, small
-     * enough to keep A/V sync tight. */
+     * samples=4096 gives ~93 ms buffer at 44.1 kHz — large enough to
+     * absorb Android scheduler jitter (which can be 20-50 ms per
+     * SDL_Delay call) without underrunning on long videos. */
     SDL_AudioSpec want = {0}, got = {0};
     want.freq = sample_rate > 0 ? sample_rate : 44100;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 2048;
+    want.samples = 4096;
     want.callback = sdl_audio_cb;
     want.userdata = NULL;
     g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
@@ -309,19 +323,52 @@ int android_play_video(const char *path, int skip) {
         SDL_PauseAudioDevice(g_audio_dev, 0);
     }
 
-    /* Main decode loop.
-     * plm_decode() takes a delta time and internally decides which
-     * frames / audio chunks to emit, so we just feed wall-clock time. */
+    /* Reset underrun counter for this video */
+    atomic_store(&g_underrun_count, 0);
+
+    /* Main decode loop with self-pacing.
+     *
+     * Instead of blindly feeding wall-clock dt to plm_decode on a fixed
+     * schedule, we check the ring buffer level and decode aggressively
+     * when it's running low. This prevents underruns on long videos
+     * where scheduler jitter (SDL_Delay can sleep 20-50 ms on Android
+     * instead of the requested 16 ms) would otherwise drain the ring.
+     *
+     * Strategy:
+     *   - If ring is below prebuffer threshold → decode immediately
+     *   - If ring is above 75% full → skip decode, just sleep briefly
+     *   - Otherwise → normal decode pass with wall-clock dt
+     */
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
     SDL_Event ev;
+    Uint32 log_timer = SDL_GetTicks();
 
     while (!plm_has_ended(plm)) {
-        Uint32 now = SDL_GetTicks();
-        double dt = (now - last_ticks) / 1000.0;
-        last_ticks = now;
+        size_t rpos = atomic_load(&audio_read_pos);
+        size_t wpos = atomic_load(&audio_write_pos);
+        size_t available = wpos - rpos;
 
-        plm_decode(plm, dt);
+        if (available < AUDIO_PREBUFFER_SAMPLES) {
+            /* Buffer running low — decode immediately to refill.
+             * Use a small fixed dt to avoid decoding too far ahead. */
+            Uint32 now = SDL_GetTicks();
+            double dt = (now - last_ticks) / 1000.0;
+            last_ticks = now;
+            if (dt > 0.050) dt = 0.050;  /* cap at 50 ms per pass */
+            plm_decode(plm, dt);
+        } else if (available < (AUDIO_RING_SAMPLES * 3) / 4) {
+            /* Buffer is healthy but not full — normal decode pass */
+            Uint32 now = SDL_GetTicks();
+            double dt = (now - last_ticks) / 1000.0;
+            last_ticks = now;
+            plm_decode(plm, dt);
+            SDL_Delay(4);  /* brief yield to avoid hogging CPU */
+        } else {
+            /* Buffer is well-filled — let the consumer drain it */
+            last_ticks = SDL_GetTicks();
+            SDL_Delay(8);
+        }
 
         /* Poll SDL events for tap-to-skip / quit */
         while (SDL_PollEvent(&ev)) {
@@ -336,9 +383,15 @@ int android_play_video(const char *path, int skip) {
             }
         }
 
-        /* Sleep ~half a frame. Decode twice per video frame to keep
-         * the audio ring fed smoothly without busy-looping. */
-        SDL_Delay((Uint32)(500.0 / (framerate > 0 ? framerate : 30.0)));
+        /* Log underrun count every 5 seconds for diagnostics */
+        if (SDL_GetTicks() - log_timer > 5000) {
+            int underruns = atomic_load(&g_underrun_count);
+            if (underruns > 0) {
+                LOGI("underruns so far: %d (ring available=%zu/%d)\n",
+                     underruns, available, AUDIO_RING_SAMPLES);
+            }
+            log_timer = SDL_GetTicks();
+        }
     }
 
 done:
@@ -349,6 +402,15 @@ done:
     }
 
     atomic_store(&g_audio_fade, 0);
+    g_last_sample = 0;
+
+    /* Log total underruns for this video — helps diagnose remaining
+     * audio issues. 0 underruns = perfectly clean playback. */
+    int total_underruns = atomic_load(&g_underrun_count);
+    if (total_underruns > 0) {
+        LOGI("audio underruns during playback: %d\n", total_underruns);
+    }
+    atomic_store(&g_underrun_count, 0);
 
     /* Resume SDL_mixer — close and reopen its audio device to get a
      * clean state, since the underlying Android audio track may have
