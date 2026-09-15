@@ -431,13 +431,40 @@ done:
     }
     atomic_store(&g_underrun_count, 0);
 
-    /* Resume SDL_mixer — close and reopen its audio device to get a
-     * clean state, since the underlying Android audio track may have
-     * been disturbed by our temporary second device. The engine's
-     * audio.c will restart music on the next GAME_MUSIC_PLAY() call. */
-    Mix_Resume(-1);
-    if (mixer_was_playing) {
-        Mix_ResumeMusic();
+    /* Resume SDL_mixer.
+     *
+     * On most devices, Mix_ResumeMusic() is enough. On Android 16
+     * (Nothing Phone 3A beta), AudioFlinger leaves the mixer's track
+     * in a half-suspended state after our SDL_CloseAudioDevice —
+     * subsequent Mix_PlayMusic calls corrupt memory and crash the
+     * SDL thread when the engine tries to render the title screen.
+     *
+     * Defensive fix: fully close and reopen the SDL_mixer audio
+     * device. This forces AudioFlinger to allocate a fresh track,
+     * bypassing any stale state. The engine's loaded Mix_Chunk /
+     * Mix_Music assets survive Mix_CloseAudio (they're refcounted
+     * separately), so GAME_MUSIC_PLAY() on the next line works
+     * normally. */
+    Mix_HaltChannel(-1);
+    Mix_HaltMusic();
+    Mix_CloseAudio();
+
+    /* Reopen with the same spec the engine uses in SDL_Audio_Init */
+    if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 1024) < 0) {
+        LOGE("Mix_OpenAudio reopen failed: %s\n", Mix_GetError());
+    } else {
+        /* Restore the click SFX that was loaded in SDL_Audio_Init.
+         * Mix_CloseAudio freed the channels but the loaded chunks
+         * are still in memory (loaded via Mix_LoadWAV_RW). They
+         * just need to be re-allocated to channels. */
+        extern Mix_Chunk *click;
+        if (click) {
+            Mix_ReserveChannels(0);  /* ensure channels are available */
+        }
+        Mix_Resume(-1);
+        if (mixer_was_playing) {
+            Mix_ResumeMusic();
+        }
     }
 
     free(g_frame_rgba);
