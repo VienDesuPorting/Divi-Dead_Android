@@ -43,10 +43,16 @@
 #define AUDIO_RING_FRAMES 16
 #define AUDIO_RING_SAMPLES (PLM_AUDIO_SAMPLES_PER_FRAME * 2 * AUDIO_RING_FRAMES)
 /* Prebuffer threshold: start SDL_Audio once the ring is at least this
- * full. 4 frames ≈ 105 ms — enough to absorb scheduler jitter without
- * making the A/V noticeably out of sync. */
-#define AUDIO_PREBUFFER_FRAMES 4
+ * full. 8 frames ≈ 210 ms — generous initial cushion to absorb GC
+ * pauses and scheduler hiccups during the first few seconds. */
+#define AUDIO_PREBUFFER_FRAMES 8
 #define AUDIO_PREBUFFER_SAMPLES (PLM_AUDIO_SAMPLES_PER_FRAME * 2 * AUDIO_PREBUFFER_FRAMES)
+/* Low-water mark: when ring drops below this, decode aggressively
+ * (no sleep) until it recovers. Set to ~6 frames (~160 ms) — well
+ * above the SDL_Audio buffer size (4096 samples ≈ 93 ms) so we have
+ * at least one buffer's worth of headroom. */
+#define AUDIO_LOW_WATER_FRAMES 6
+#define AUDIO_LOW_WATER_SAMPLES (PLM_AUDIO_SAMPLES_PER_FRAME * 2 * AUDIO_LOW_WATER_FRAMES)
 
 static float audio_ring[AUDIO_RING_SAMPLES];
 static atomic_size_t audio_read_pos;
@@ -334,10 +340,15 @@ int android_play_video(const char *path, int skip) {
      * where scheduler jitter (SDL_Delay can sleep 20-50 ms on Android
      * instead of the requested 16 ms) would otherwise drain the ring.
      *
-     * Strategy:
-     *   - If ring is below prebuffer threshold → decode immediately
-     *   - If ring is above 75% full → skip decode, just sleep briefly
-     *   - Otherwise → normal decode pass with wall-clock dt
+     * Strategy (three tiers based on ring fill level):
+     *   - Below LOW_WATER (~160 ms / 6 frames) → decode immediately
+     *     with no sleep, repeat until above LOW_WATER
+     *   - Below 75% full → normal decode pass + brief 4 ms yield
+     *   - Above 75% full → skip decode, sleep 8 ms to let consumer drain
+     *
+     * The aggressive tier is critical for absorbing GC pauses: when the
+     * runtime pauses for 50 ms, the consumer drains ~5 ms of audio per
+     * 93 ms SDL buffer, and we need to catch up fast.
      */
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
@@ -349,14 +360,22 @@ int android_play_video(const char *path, int skip) {
         size_t wpos = atomic_load(&audio_write_pos);
         size_t available = wpos - rpos;
 
-        if (available < AUDIO_PREBUFFER_SAMPLES) {
-            /* Buffer running low — decode immediately to refill.
-             * Use a small fixed dt to avoid decoding too far ahead. */
-            Uint32 now = SDL_GetTicks();
-            double dt = (now - last_ticks) / 1000.0;
-            last_ticks = now;
-            if (dt > 0.050) dt = 0.050;  /* cap at 50 ms per pass */
-            plm_decode(plm, dt);
+        if (available < AUDIO_LOW_WATER_SAMPLES) {
+            /* Buffer is running low — decode in a tight loop without
+             * sleeping until the ring recovers above LOW_WATER.
+             * Cap dt at 50 ms per plm_decode call to avoid decoding
+             * too far ahead of the video timestamp. */
+            do {
+                if (plm_has_ended(plm)) goto done;
+                Uint32 now = SDL_GetTicks();
+                double dt = (now - last_ticks) / 1000.0;
+                last_ticks = now;
+                if (dt > 0.050) dt = 0.050;
+                plm_decode(plm, dt);
+                rpos = atomic_load(&audio_read_pos);
+                wpos = atomic_load(&audio_write_pos);
+                available = wpos - rpos;
+            } while (available < AUDIO_LOW_WATER_SAMPLES);
         } else if (available < (AUDIO_RING_SAMPLES * 3) / 4) {
             /* Buffer is healthy but not full — normal decode pass */
             Uint32 now = SDL_GetTicks();
