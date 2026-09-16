@@ -156,14 +156,51 @@ int android_play_video(const char *path, int skip) {
     g_video_height = plm_get_height(plm);
     int sample_rate = plm_get_samplerate(plm);
     double framerate = plm_get_framerate(plm);
+    double duration = plm_get_duration(plm);
     int has_audio = plm_get_audio_enabled(plm);
     int has_video = plm_get_video_enabled(plm);
-    LOGI("video %dx%d @ %.2ffps (enabled=%d), audio %d Hz (enabled=%d)\n",
-         g_video_width, g_video_height, framerate, has_video, sample_rate, has_audio);
+    LOGI("video %dx%d @ %.2ffps duration=%.2fs (video=%d, audio=%d Hz=%d)\n",
+         g_video_width, g_video_height, framerate, duration,
+         has_video, sample_rate, has_audio);
 
     if (!has_video) {
         LOGE("video stream is disabled — no frames will be decoded\n");
     }
+
+    /* Adapt buffer parameters to video duration.
+     *
+     * For short videos (≤ 10 s, e.g. CS_ROGO.MPG logo at 3 s), a large
+     * lead_time / high-water cap is overkill — the prebuffer delay and
+     * A/V sync offset become a noticeable fraction of the video length.
+     * For long videos (≥ 30 s, e.g. OPEN.MPG opening at ~2 min), we
+     * want maximum jitter resistance.
+     *
+     *                short (≤10s)    long (≥30s)
+     *                ----------      ----------
+     *   lead_time    200 ms          800 ms
+     *   HIGH_START   200 ms          500 ms
+     *   HIGH_MAX     1.0 s           2.5 s
+     *
+     * The thresholds are linearly interpolated between 10 s and 30 s
+     * of duration, so a 20-second video gets the midpoint values. */
+    double lead_time, hw_start_sec, hw_max_sec;
+    if (duration <= 10.0) {
+        lead_time = 0.200;
+        hw_start_sec = 0.200;
+        hw_max_sec = 1.0;
+    } else if (duration >= 30.0) {
+        lead_time = 0.800;
+        hw_start_sec = 0.500;
+        hw_max_sec = 2.5;
+    } else {
+        /* Linear interpolation between 10s and 30s */
+        double t = (duration - 10.0) / 20.0;
+        lead_time = 0.200 + t * (0.800 - 0.200);
+        hw_start_sec = 0.200 + t * (0.500 - 0.200);
+        hw_max_sec = 1.0 + t * (2.5 - 1.0);
+    }
+    LOGI("audio params: lead_time=%.0fms, hw_start=%.0fms, hw_max=%.0fms\n",
+         lead_time * 1000, hw_start_sec * 1000, hw_max_sec * 1000);
 
     g_frame_rgba = (uint8_t *)malloc(g_video_width * g_video_height * 4);
     if (!g_frame_rgba) {
@@ -212,48 +249,44 @@ int android_play_video(const char *path, int skip) {
              SDL_GetError());
     }
 
-    /* Tell pl_mpeg to decode audio ahead of video by ~800 ms — well
-     * past the 372 ms SDL buffer so the queue is always pre-filled
-     * by ~428 ms even at nominal level, giving us headroom to absorb
-     * GC pauses and scheduler hiccups without underrunning.
+    /* Tell pl_mpeg to decode audio ahead of video by lead_time.
+     * Adaptively chosen above based on video duration:
+     *   short videos (≤10s): 200 ms — minimal A/V offset
+     *   long videos (≥30s): 800 ms — maximum jitter resistance
      *
      * The pl_mpeg documentation suggests setting this to
      * (SDL_AudioSpec.samples / samplerate), but that's the minimum.
-     * A larger value trades A/V sync latency for stability. 800 ms
-     * is imperceptible for pre-rendered intro videos. */
+     * A larger value trades A/V sync latency for stability. */
     if (g_audio_dev && sample_rate > 0) {
-        plm_set_audio_lead_time(plm, 0.800);
+        plm_set_audio_lead_time(plm, lead_time);
     }
 
-    /* Water marks for the self-pacing decode loop. Declared here so
-     * the prebuffer loop and main loop below can both use them.
+    /* Water marks for the self-pacing decode loop, derived from the
+     * duration-adaptive hw_start_sec / hw_max_sec above.
      *
-     * Threshold rationale (with want.samples = 16384, lead_time = 800 ms):
-     *   - LOW_WATER = 8192 frames (~186 ms) — half the SDL buffer;
-     *     below this we decode aggressively with no sleep
-     *   - HIGH_WATER_MAX = 110592 frames (~2506 ms ≈ 2.5 s) — final
-     *     ceiling after ramp-up completes; above this we sleep to
-     *     let the consumer drain
-     *   - HIGH_WATER_START = 22000 frames (~500 ms) — initial cap
-     *     for fast startup; the ramp-up below grows it over time
+     *   - LOW_WATER = ~186 ms (half the SDL buffer) — fixed; below this
+     *     we decode aggressively with no sleep
+     *   - HIGH_WATER_START = hw_start_sec — initial cap (200/500 ms)
+     *   - HIGH_WATER_MAX = hw_max_sec — final ceiling (1.0/2.5 s)
      *
      * SDL_AudioSpec.samples is in frames (per channel), so the actual
      * byte size of N frames is N * 2 channels * 2 bytes (S16 stereo).
      */
-    const Uint32 AUDIO_LOW_WATER_BYTES = 8192 * 2 * 2;        /* ~186 ms */
-    const Uint32 AUDIO_HIGH_WATER_START_BYTES = 22000 * 2 * 2; /* ~500 ms */
-    const Uint32 AUDIO_HIGH_WATER_MAX_BYTES = 110592 * 2 * 2;  /* ~2506 ms ≈ 2.5 s */
-    /* How much the high-water cap grows per second of playback.
-     * ~2200 frames/sec ≈ 500 ms / 5 sec — reaches HIGH_WATER_MAX
-     * about 20 seconds into playback. */
-    const Uint32 AUDIO_HIGH_WATER_GROWTH_PER_SEC = 2200 * 2 * 2;
+    int effective_rate = sample_rate > 0 ? sample_rate : 44100;
+    const Uint32 AUDIO_LOW_WATER_BYTES = (Uint32)(8192 * 2 * 2);  /* ~186 ms @ 44.1k */
+    const Uint32 AUDIO_HIGH_WATER_START_BYTES = (Uint32)(hw_start_sec * effective_rate * 2 * 2);
+    const Uint32 AUDIO_HIGH_WATER_MAX_BYTES = (Uint32)(hw_max_sec * effective_rate * 2 * 2);
+    /* Ramp-up rate: reach HIGH_WATER_MAX in ~20 seconds of playback. */
+    const Uint32 AUDIO_HIGH_WATER_GROWTH_PER_SEC =
+        (AUDIO_HIGH_WATER_MAX_BYTES - AUDIO_HIGH_WATER_START_BYTES) / 20;
 
     /* Prebuffer: decode frames (without playback) until the SDL audio
      * queue is filled to HIGH_WATER_START (not MAX). This gives SDL_Audio
-     * ~500 ms of headroom before playback even starts — enough to absorb
-     * startup-time GC pauses — without making the user wait too long
-     * for video to begin. The main decode loop below will continue to
-     * grow the buffer toward HIGH_WATER_MAX during playback.
+     * an initial cushion (200 ms for short videos, 500 ms for long ones)
+     * before playback even starts — enough to absorb startup-time GC
+     * pauses — without making the user wait too long for video to begin.
+     * The main decode loop below will continue to grow the buffer toward
+     * HIGH_WATER_MAX during playback.
      *
      * The video callback still runs during prebuffer (frames are
      * rendered to GL but not yet swapped to display because SDL_Audio
