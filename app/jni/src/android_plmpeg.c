@@ -224,19 +224,8 @@ int android_play_video(const char *path, int skip) {
         plm_set_audio_lead_time(plm, 0.250);
     }
 
-    SDL_PauseAudioDevice(g_audio_dev, 0);
-
-    /* Main decode loop with self-pacing based on SDL audio queue level.
-     *
-     * The naive approach (plm_decode(wall_clock_dt) + sleep) fails on
-     * Android because SDL_Delay granularity is 20-50 ms, not the
-     * requested 16 ms. This causes dt to accumulate, and plm_decode
-     * then emits several video frames + audio chunks in a burst,
-     * producing stutters in both video and audio.
-     *
-     * Instead, we monitor SDL_GetQueuedAudioSize and decode aggressively
-     * when the queue is running low, sleep briefly when it's well
-     * filled. This decouples the decode cadence from wall-clock jitter.
+    /* Water marks for the self-pacing decode loop. Declared here so
+     * the prebuffer loop below can use AUDIO_HIGH_WATER_BYTES.
      *
      * Threshold rationale (with want.samples = 8192, lead_time = 250 ms):
      *   - LOW_WATER = 4096 frames (~93 ms) — half the SDL buffer;
@@ -254,6 +243,51 @@ int android_play_video(const char *path, int skip) {
     const Uint32 AUDIO_LOW_WATER_BYTES = 4096 * 2 * 2;    /* ~93 ms */
     const Uint32 AUDIO_HIGH_WATER_BYTES = 32768 * 2 * 2;  /* ~743 ms */
 
+    /* Prebuffer: decode frames (without playback) until the SDL audio
+     * queue is filled to HIGH_WATER. This gives SDL_Audio ~743 ms of
+     * headroom before playback even starts — enough to absorb any
+     * startup-time GC pauses, dynamic linker work, or first-frame
+     * texture uploads that would otherwise cause an early underrun.
+     *
+     * The video callback still runs during prebuffer (frames are
+     * rendered to GL but not yet swapped to display because SDL_Audio
+     * is paused — actually GL swaps happen, but the video just shows
+     * the first frame statically, which is invisible since playback
+     * starts immediately after). */
+    if (g_audio_dev) {
+        LOGI("prebuffering audio to HIGH_WATER...\n");
+        Uint32 prebuffer_start = SDL_GetTicks();
+        while (1) {
+            Uint32 now = SDL_GetTicks();
+            double dt = (now - prebuffer_start) / 1000.0;
+            prebuffer_start = now;
+            if (dt > 1.0 / 30.0) dt = 1.0 / 30.0;
+            plm_decode(plm, dt);
+
+            Uint32 queued = SDL_GetQueuedAudioSize(g_audio_dev);
+            if (queued >= AUDIO_HIGH_WATER_BYTES) break;
+            if (plm_has_ended(plm)) break;
+            SDL_Delay(2);
+        }
+        LOGI("prebuffered %u bytes\n", SDL_GetQueuedAudioSize(g_audio_dev));
+    }
+
+    SDL_PauseAudioDevice(g_audio_dev, 0);
+
+    /* Main decode loop with self-pacing based on SDL audio queue level.
+     *
+     * The naive approach (plm_decode(wall_clock_dt) + sleep) fails on
+     * Android because SDL_Delay granularity is 20-50 ms, not the
+     * requested 16 ms. This causes dt to accumulate, and plm_decode
+     * then emits several video frames + audio chunks in a burst,
+     * producing stutters in both video and audio.
+     *
+     * Instead, we monitor SDL_GetQueuedAudioSize and decode aggressively
+     * when the queue is running low, sleep briefly when it's well
+     * filled. This decouples the decode cadence from wall-clock jitter.
+     * Water marks (AUDIO_LOW_WATER_BYTES / AUDIO_HIGH_WATER_BYTES) are
+     * declared above, before the prebuffer loop.
+     */
     Uint32 last_ticks = SDL_GetTicks();
     int skipped = 0;
     SDL_Event ev;
