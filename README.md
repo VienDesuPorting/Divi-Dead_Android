@@ -129,19 +129,6 @@ Both scripts are pure Python 3 with no third-party dependencies.
 
 ## Troubleshooting
 
-### "SDL2 not found!" CMake error
-
-CMake `FetchContent` downloads SDL2 automatically. If you see this, verify network access during the configure step. As a fallback, manually clone the SDL2 stack:
-
-```bash
-cd app/jni
-mkdir -p SDL && cd SDL
-git clone --branch SDL2 https://github.com/libsdl-org/SDL.git
-git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_image.git
-git clone --branch release-2.8.x https://github.com/libsdl-org/SDL_mixer.git
-git clone --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git
-```
-
 ### App crashes on launch
 
 ```bash
