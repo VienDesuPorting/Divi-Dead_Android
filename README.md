@@ -6,6 +6,16 @@ A native Android port of the **Divi-Dead** visual novel (Leaf, 1998). Built on S
 - ABIs: `arm64-v8a`, `armeabi-v7a`
 - Package: `su.viende.dividead`
 
+## Links
+
+- **Source engine:** [gameblabla/divi-dead](https://github.com/gameblabla/divi-dead) — fork of soywiz's SDL 1.2 Divi-Dead interpreter
+- **Video decoder:** [phoboslab/pl_mpeg](https://github.com/phoboslab/pl_mpeg) — single-file MPEG-1 + MP2 decoder
+- **VienDesu! Porting Team:**
+  - Telegram (EN): https://t.me/visual_novels_android_eng
+  - Telegram (RU): https://t.me/visual_novels_for_android
+  - YouTube: https://www.youtube.com/@viendesu
+  - Web: https://viende.su
+
 ---
 
 ## Contents
@@ -28,7 +38,7 @@ A native Android port of the **Divi-Dead** visual novel (Leaf, 1998). Built on S
 
 ## Overview
 
-The engine is derived from gameblabla's fork of soywiz's SDL 1.2 interpreter, reworked for SDL2 and adapted for Android. The original PC archives (`SG.DL1` ~112 MB and `WV.DL1` ~315 MB, both LZ77-compressed PAK files) are bundled inside the APK and unpacked to internal storage on first launch.
+The engine is derived from [gameblabla's fork](https://github.com/gameblabla/divi-dead) of soywiz's SDL 1.2 interpreter, reworked for SDL2 and adapted for Android. The original PC archives (`SG.DL1` ~112 MB and `WV.DL1` ~315 MB, both LZ77-compressed PAK files) are bundled inside the APK and unpacked to internal storage on first launch.
 
 | Component | Approach |
 |-----------|----------|
@@ -372,7 +382,7 @@ The engine calls `android_get_data_path("SG.DL1")` instead of opening the asset 
 
 ## Engine patches
 
-Derived from gameblabla/soywiz SDL 1.2 engine. Changes that adapt it for SDL2 + Android:
+Derived from [gameblabla's fork](https://github.com/gameblabla/divi-dead) of soywiz's SDL 1.2 engine. Changes that adapt it for SDL2 + Android:
 
 | File | Patch |
 |------|-------|
@@ -550,9 +560,10 @@ Make sure your translated `LANG/ENGLISH.TXT` is encoded as UTF-8 (not Windows-12
 
 ## Credits & license
 
-- **Engine source:** gameblabla's fork of soywiz's Divi-Dead interpreter — released for personal use only.
+- **Engine source:** [gameblabla/divi-dead](https://github.com/gameblabla/divi-dead) — fork of soywiz's Divi-Dead interpreter, released for personal use only.
+- **Video decoder:** [phoboslab/pl_mpeg](https://github.com/phoboslab/pl_mpeg) — MIT license.
 - **SDL2, SDL_image, SDL_mixer, SDL_ttf:** zlib license.
-- **Android port:** © VienDesu! Porting Team.
+- **Android port:** © [VienDesu! Porting Team](https://viende.su).
 
 This project is for **personal use only**. The original Divi-Dead game data (`SG.DL1`, `WV.DL1`, videos, music) is copyrighted by Leaf/AQUAPLUS and is **not** included in this repository — you must supply your own legally-obtained copy.
 
