@@ -212,46 +212,48 @@ int android_play_video(const char *path, int skip) {
              SDL_GetError());
     }
 
-    /* Tell pl_mpeg to decode audio ahead of video by ~500 ms — well
+    /* Tell pl_mpeg to decode audio ahead of video by ~800 ms — well
      * past the 372 ms SDL buffer so the queue is always pre-filled
-     * by ~128 ms even at nominal level, giving us headroom to absorb
+     * by ~428 ms even at nominal level, giving us headroom to absorb
      * GC pauses and scheduler hiccups without underrunning.
      *
      * The pl_mpeg documentation suggests setting this to
      * (SDL_AudioSpec.samples / samplerate), but that's the minimum.
-     * A larger value trades A/V sync latency for stability. 500 ms
+     * A larger value trades A/V sync latency for stability. 800 ms
      * is imperceptible for pre-rendered intro videos. */
     if (g_audio_dev && sample_rate > 0) {
-        plm_set_audio_lead_time(plm, 0.500);
+        plm_set_audio_lead_time(plm, 0.800);
     }
 
     /* Water marks for the self-pacing decode loop. Declared here so
-     * the prebuffer loop below can use AUDIO_HIGH_WATER_BYTES.
+     * the prebuffer loop and main loop below can both use them.
      *
-     * Threshold rationale (with want.samples = 16384, lead_time = 500 ms):
+     * Threshold rationale (with want.samples = 16384, lead_time = 800 ms):
      *   - LOW_WATER = 8192 frames (~186 ms) — half the SDL buffer;
      *     below this we decode aggressively with no sleep
-     *   - HIGH_WATER = 65536 frames (~1486 ms ≈ 1.5 s) — generous
-     *     upper bound; above this we sleep to let the consumer drain
-     *
-     * The very wide window between LOW and HIGH (~1.3 s) gives the
-     * decoder plenty of room to burst-fill after a GC pause without
-     * immediately hitting the high-water cap. This is what tames the
-     * end-of-video crackles: when the decoder speeds up near the end
-     * (less I/O seek, last frames cached), it can fill the queue far
-     * past the previous 743 ms cap without being told to sleep.
+     *   - HIGH_WATER_MAX = 110592 frames (~2506 ms ≈ 2.5 s) — final
+     *     ceiling after ramp-up completes; above this we sleep to
+     *     let the consumer drain
+     *   - HIGH_WATER_START = 22000 frames (~500 ms) — initial cap
+     *     for fast startup; the ramp-up below grows it over time
      *
      * SDL_AudioSpec.samples is in frames (per channel), so the actual
      * byte size of N frames is N * 2 channels * 2 bytes (S16 stereo).
      */
-    const Uint32 AUDIO_LOW_WATER_BYTES = 8192 * 2 * 2;     /* ~186 ms */
-    const Uint32 AUDIO_HIGH_WATER_BYTES = 65536 * 2 * 2;   /* ~1486 ms */
+    const Uint32 AUDIO_LOW_WATER_BYTES = 8192 * 2 * 2;        /* ~186 ms */
+    const Uint32 AUDIO_HIGH_WATER_START_BYTES = 22000 * 2 * 2; /* ~500 ms */
+    const Uint32 AUDIO_HIGH_WATER_MAX_BYTES = 110592 * 2 * 2;  /* ~2506 ms ≈ 2.5 s */
+    /* How much the high-water cap grows per second of playback.
+     * ~2200 frames/sec ≈ 500 ms / 5 sec — reaches HIGH_WATER_MAX
+     * about 20 seconds into playback. */
+    const Uint32 AUDIO_HIGH_WATER_GROWTH_PER_SEC = 2200 * 2 * 2;
 
     /* Prebuffer: decode frames (without playback) until the SDL audio
-     * queue is filled to HIGH_WATER. This gives SDL_Audio ~1.5 s of
-     * headroom before playback even starts — enough to absorb any
-     * startup-time GC pauses, dynamic linker work, or first-frame
-     * texture uploads that would otherwise cause an early underrun.
+     * queue is filled to HIGH_WATER_START (not MAX). This gives SDL_Audio
+     * ~500 ms of headroom before playback even starts — enough to absorb
+     * startup-time GC pauses — without making the user wait too long
+     * for video to begin. The main decode loop below will continue to
+     * grow the buffer toward HIGH_WATER_MAX during playback.
      *
      * The video callback still runs during prebuffer (frames are
      * rendered to GL but not yet swapped to display because SDL_Audio
@@ -259,7 +261,6 @@ int android_play_video(const char *path, int skip) {
      * the first frame statically, which is invisible since playback
      * starts immediately after). */
     if (g_audio_dev) {
-        LOGI("prebuffering audio to HIGH_WATER...\n");
         Uint32 prebuffer_start = SDL_GetTicks();
         while (1) {
             Uint32 now = SDL_GetTicks();
@@ -269,16 +270,16 @@ int android_play_video(const char *path, int skip) {
             plm_decode(plm, dt);
 
             Uint32 queued = SDL_GetQueuedAudioSize(g_audio_dev);
-            if (queued >= AUDIO_HIGH_WATER_BYTES) break;
+            if (queued >= AUDIO_HIGH_WATER_START_BYTES) break;
             if (plm_has_ended(plm)) break;
             SDL_Delay(2);
         }
-        LOGI("prebuffered %u bytes\n", SDL_GetQueuedAudioSize(g_audio_dev));
     }
 
     SDL_PauseAudioDevice(g_audio_dev, 0);
 
-    /* Main decode loop with self-pacing based on SDL audio queue level.
+    /* Main decode loop with self-pacing based on SDL audio queue level,
+     * with a Ren'Py-style dynamic high-water mark that grows over time.
      *
      * The naive approach (plm_decode(wall_clock_dt) + sleep) fails on
      * Android because SDL_Delay granularity is 20-50 ms, not the
@@ -289,14 +290,30 @@ int android_play_video(const char *path, int skip) {
      * Instead, we monitor SDL_GetQueuedAudioSize and decode aggressively
      * when the queue is running low, sleep briefly when it's well
      * filled. This decouples the decode cadence from wall-clock jitter.
-     * Water marks (AUDIO_LOW_WATER_BYTES / AUDIO_HIGH_WATER_BYTES) are
-     * declared above, before the prebuffer loop.
+     *
+     * Ren'Py-inspired ramp-up (see ffmedia.c:audio_queue_target_samples):
+     * the high-water cap starts at HIGH_WATER_START (~500 ms) for fast
+     * startup, then grows by ~500 ms every 5 seconds until it reaches
+     * HIGH_WATER_MAX (~2.5 s). This gives the best of both worlds:
+     *   - Fast startup: prebuffer fills only 500 ms before playback
+     *   - Big cushion later: by 20 seconds in, the buffer cap is 2.5 s,
+     *     enough to absorb even long GC pauses near end-of-video
      */
     Uint32 last_ticks = SDL_GetTicks();
+    Uint32 playback_start_ticks = last_ticks;
     int skipped = 0;
     SDL_Event ev;
 
     while (!plm_has_ended(plm)) {
+        /* Compute current high-water cap: starts at HIGH_WATER_START,
+         * grows linearly to HIGH_WATER_MAX over ~20 seconds. */
+        Uint32 elapsed_ms = SDL_GetTicks() - playback_start_ticks;
+        Uint32 growth = (AUDIO_HIGH_WATER_GROWTH_PER_SEC * elapsed_ms) / 1000;
+        Uint32 high_water = AUDIO_HIGH_WATER_START_BYTES + growth;
+        if (high_water > AUDIO_HIGH_WATER_MAX_BYTES) {
+            high_water = AUDIO_HIGH_WATER_MAX_BYTES;
+        }
+
         Uint32 queued = g_audio_dev ? SDL_GetQueuedAudioSize(g_audio_dev) : 0;
 
         if (queued < AUDIO_LOW_WATER_BYTES) {
@@ -312,7 +329,7 @@ int android_play_video(const char *path, int skip) {
                 plm_decode(plm, dt);
                 queued = g_audio_dev ? SDL_GetQueuedAudioSize(g_audio_dev) : 0;
             } while (queued < AUDIO_LOW_WATER_BYTES);
-        } else if (queued < AUDIO_HIGH_WATER_BYTES) {
+        } else if (queued < high_water) {
             /* Queue is healthy — normal decode pass + brief yield */
             Uint32 now = SDL_GetTicks();
             double dt = (now - last_ticks) / 1000.0;
@@ -321,7 +338,9 @@ int android_play_video(const char *path, int skip) {
             plm_decode(plm, dt);
             SDL_Delay(4);  /* brief yield to avoid hogging CPU */
         } else {
-            /* Queue is full — let the consumer drain it */
+            /* Queue is above the current high-water cap — let the
+             * consumer drain it. The cap grows over time, so this
+             * branch is taken less often as playback progresses. */
             last_ticks = SDL_GetTicks();
             SDL_Delay(8);
         }
