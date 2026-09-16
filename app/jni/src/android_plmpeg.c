@@ -196,15 +196,15 @@ int android_play_video(const char *path, int skip) {
     SDL_Delay(20);  /* Give AudioFlinger a moment to actually release */
 
     /* Open SDL_Audio device using the queue API (no callback).
-     * samples=8192 gives ~186 ms buffer at 44.1 kHz — double the
-     * previous 4096 to better absorb Android scheduler jitter and
-     * GC pauses (~50 ms each) that were causing occasional crackles.
-     * Lead time below is matched to this buffer size. */
+     * samples=16384 gives ~372 ms buffer at 44.1 kHz — 4x the original
+     * 4096. This is the front-line defense against Android scheduler
+     * jitter and GC pauses (~50 ms each). The larger the SDL buffer,
+     * the longer SDL_Audio can keep playing without being fed. */
     SDL_AudioSpec want = {0};
     want.freq = sample_rate > 0 ? sample_rate : 44100;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 8192;
+    want.samples = 16384;
     /* No callback — we'll use SDL_QueueAudio to push samples. */
     g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
     if (g_audio_dev == 0) {
@@ -212,39 +212,43 @@ int android_play_video(const char *path, int skip) {
              SDL_GetError());
     }
 
-    /* Tell pl_mpeg to decode audio ahead of video by ~250 ms — larger
-     * than the SDL buffer (186 ms) so the queue is always pre-filled
-     * by one extra buffer's worth, giving us headroom to absorb GC
-     * pauses and scheduler hiccups without underrunning.
+    /* Tell pl_mpeg to decode audio ahead of video by ~500 ms — well
+     * past the 372 ms SDL buffer so the queue is always pre-filled
+     * by ~128 ms even at nominal level, giving us headroom to absorb
+     * GC pauses and scheduler hiccups without underrunning.
      *
      * The pl_mpeg documentation suggests setting this to
      * (SDL_AudioSpec.samples / samplerate), but that's the minimum.
-     * A larger value trades a bit of A/V sync latency for stability. */
+     * A larger value trades A/V sync latency for stability. 500 ms
+     * is imperceptible for pre-rendered intro videos. */
     if (g_audio_dev && sample_rate > 0) {
-        plm_set_audio_lead_time(plm, 0.250);
+        plm_set_audio_lead_time(plm, 0.500);
     }
 
     /* Water marks for the self-pacing decode loop. Declared here so
      * the prebuffer loop below can use AUDIO_HIGH_WATER_BYTES.
      *
-     * Threshold rationale (with want.samples = 8192, lead_time = 250 ms):
-     *   - LOW_WATER = 4096 frames (~93 ms) — half the SDL buffer;
+     * Threshold rationale (with want.samples = 16384, lead_time = 500 ms):
+     *   - LOW_WATER = 8192 frames (~186 ms) — half the SDL buffer;
      *     below this we decode aggressively with no sleep
-     *   - HIGH_WATER = 32768 frames (~743 ms) — generous upper bound;
-     *     above this we sleep to let the consumer drain
+     *   - HIGH_WATER = 65536 frames (~1486 ms ≈ 1.5 s) — generous
+     *     upper bound; above this we sleep to let the consumer drain
      *
-     * The wide window between LOW and HIGH (650 ms) gives the decoder
-     * room to burst-fill after a GC pause without immediately hitting
-     * the high-water cap.
+     * The very wide window between LOW and HIGH (~1.3 s) gives the
+     * decoder plenty of room to burst-fill after a GC pause without
+     * immediately hitting the high-water cap. This is what tames the
+     * end-of-video crackles: when the decoder speeds up near the end
+     * (less I/O seek, last frames cached), it can fill the queue far
+     * past the previous 743 ms cap without being told to sleep.
      *
      * SDL_AudioSpec.samples is in frames (per channel), so the actual
      * byte size of N frames is N * 2 channels * 2 bytes (S16 stereo).
      */
-    const Uint32 AUDIO_LOW_WATER_BYTES = 4096 * 2 * 2;    /* ~93 ms */
-    const Uint32 AUDIO_HIGH_WATER_BYTES = 32768 * 2 * 2;  /* ~743 ms */
+    const Uint32 AUDIO_LOW_WATER_BYTES = 8192 * 2 * 2;     /* ~186 ms */
+    const Uint32 AUDIO_HIGH_WATER_BYTES = 65536 * 2 * 2;   /* ~1486 ms */
 
     /* Prebuffer: decode frames (without playback) until the SDL audio
-     * queue is filled to HIGH_WATER. This gives SDL_Audio ~743 ms of
+     * queue is filled to HIGH_WATER. This gives SDL_Audio ~1.5 s of
      * headroom before playback even starts — enough to absorb any
      * startup-time GC pauses, dynamic linker work, or first-frame
      * texture uploads that would otherwise cause an early underrun.
