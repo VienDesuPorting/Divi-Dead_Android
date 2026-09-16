@@ -233,15 +233,35 @@ int android_play_video(const char *path, int skip) {
     SDL_Delay(20);  /* Give AudioFlinger a moment to actually release */
 
     /* Open SDL_Audio device using the queue API (no callback).
-     * samples=16384 gives ~372 ms buffer at 44.1 kHz — 4x the original
-     * 4096. This is the front-line defense against Android scheduler
-     * jitter and GC pauses (~50 ms each). The larger the SDL buffer,
-     * the longer SDL_Audio can keep playing without being fed. */
+     * The samples count is adapted to video duration:
+     *   - short videos (≤10s): samples=4096 (~93 ms) — small buffer
+     *     matches the small lead_time, so pl_mpeg can keep up
+     *   - long videos (≥30s):  samples=16384 (~372 ms) — big buffer
+     *     for jitter resistance
+     * Smaller SDL buffer for short videos is critical: if the buffer
+     * is much larger than lead_time, the consumer drains faster than
+     * the decoder can fill, and the tight-loop LOW_WATER branch kicks
+     * in permanently, starving the video callback. */
+    int want_samples;
+    if (duration <= 10.0) {
+        want_samples = 4096;   /* ~93 ms */
+    } else if (duration >= 30.0) {
+        want_samples = 16384;  /* ~372 ms */
+    } else {
+        /* Linear interpolation: 4096 → 16384 over 10s → 30s */
+        double t = (duration - 10.0) / 20.0;
+        want_samples = (int)(4096 + t * (16384 - 4096));
+        /* Round to power of 2 (SDL_AudioSpec.samples should be) */
+        int p = 1;
+        while (p < want_samples) p <<= 1;
+        want_samples = p;
+    }
+
     SDL_AudioSpec want = {0};
     want.freq = sample_rate > 0 ? sample_rate : 44100;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 16384;
+    want.samples = want_samples;
     /* No callback — we'll use SDL_QueueAudio to push samples. */
     g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
     if (g_audio_dev == 0) {
@@ -273,12 +293,20 @@ int android_play_video(const char *path, int skip) {
      * byte size of N frames is N * 2 channels * 2 bytes (S16 stereo).
      */
     int effective_rate = sample_rate > 0 ? sample_rate : 44100;
-    const Uint32 AUDIO_LOW_WATER_BYTES = (Uint32)(8192 * 2 * 2);  /* ~186 ms @ 44.1k */
+    /* LOW_WATER = half the SDL buffer. For short videos (4096 samples
+     * = 93 ms buffer) this is ~46 ms — tight loop kicks in early but
+     * the small buffer means it can actually fill above the threshold
+     * (pl_mpeg can decode 200 ms ahead via lead_time). For long videos
+     * (16384 samples = 372 ms buffer) this is ~186 ms. */
+    const Uint32 AUDIO_LOW_WATER_BYTES = (Uint32)(want_samples * 2 * 2 / 2);
     const Uint32 AUDIO_HIGH_WATER_START_BYTES = (Uint32)(hw_start_sec * effective_rate * 2 * 2);
     const Uint32 AUDIO_HIGH_WATER_MAX_BYTES = (Uint32)(hw_max_sec * effective_rate * 2 * 2);
-    /* Ramp-up rate: reach HIGH_WATER_MAX in ~20 seconds of playback. */
+    /* Ramp-up rate: reach HIGH_WATER_MAX in ~20 seconds of playback.
+     * Guard against divide-by-zero if START == MAX (very short videos). */
     const Uint32 AUDIO_HIGH_WATER_GROWTH_PER_SEC =
-        (AUDIO_HIGH_WATER_MAX_BYTES - AUDIO_HIGH_WATER_START_BYTES) / 20;
+        (AUDIO_HIGH_WATER_MAX_BYTES > AUDIO_HIGH_WATER_START_BYTES)
+        ? (AUDIO_HIGH_WATER_MAX_BYTES - AUDIO_HIGH_WATER_START_BYTES) / 20
+        : 0;
 
     /* Prebuffer: decode frames (without playback) until the SDL audio
      * queue is filled to HIGH_WATER_START (not MAX). This gives SDL_Audio
